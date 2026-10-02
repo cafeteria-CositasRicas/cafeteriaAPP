@@ -6,18 +6,18 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <style>
-:root{--bg:#eef1ec;--ink:#1f2a24;--mut:#66726b;--card:#fff;--line:#d6ddd7;--acc:#1f5c4a;--pen:#c9801a;--ok:#2e8b57;--bad:#b3402f}
+:root{--bg:#efe5d8;--ink:#2b1b12;--mut:#7a6556;--card:#fffaf3;--line:#dccdbb;--acc:#6b3f23;--pen:#d08a22;--ok:#4f7d3a;--bad:#b3402f;--foam:#f7efe4}
 *{box-sizing:border-box}html,body{margin:0}
 body{font-family:"Bricolage Grotesque",system-ui,sans-serif;background:var(--bg);color:var(--ink);padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
 button,input,select{font:inherit;color:inherit}
-button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:.55rem .85rem;cursor:pointer;min-height:40px}
+button{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:.55rem .85rem;cursor:pointer;min-height:40px}
 button.pri{background:var(--acc);border-color:var(--acc);color:#fff}button.x{color:var(--bad)}
-button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #7fb8a4;outline-offset:1px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #d9a066;outline-offset:1px}
 input,select{border:1px solid var(--line);border-radius:8px;padding:.6rem;width:100%;background:#fff;min-height:42px}
 input[type=checkbox]{width:22px;height:22px;min-height:0;accent-color:var(--acc)}
 header.top{background:var(--ink);color:#fff;padding:.7rem 1rem;display:flex;justify-content:space-between;align-items:center;gap:1rem}
 header.top h1{font-size:1.2rem;margin:0;font-weight:800}header.top small{opacity:.7}
-nav{display:flex;gap:.4rem;overflow-x:auto;padding:.6rem 1rem;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+nav{display:flex;gap:.4rem;overflow-x:auto;padding:.6rem 1rem;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
 nav button{white-space:nowrap;border-radius:99px}nav button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
 main{max-width:1100px;margin:0 auto;padding:1rem}
 .bar{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem}.bar b{margin-right:auto}
@@ -35,15 +35,50 @@ table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;ove
 .sheet{background:#fff;width:100%;max-width:720px;max-height:92vh;overflow:auto;border-radius:16px 16px 0 0;padding:1rem;display:flex;flex-direction:column;gap:.7rem}
 @media(min-width:700px){.ov{align-items:center}.sheet{border-radius:16px}}
 .sheet h2{margin:0}.sheet footer.bar{position:sticky;bottom:-1rem;background:#fff;padding:.6rem 0;margin:0}
-.prow{display:flex;align-items:center;gap:.5rem;border:1px solid var(--line);border-radius:10px;padding:.45rem .6rem}.prow.on{border-color:var(--acc);background:#eaf4ef}
+.prow{display:flex;align-items:center;gap:.5rem;border:1px solid var(--line);border-radius:10px;padding:.45rem .6rem}.prow.on{border-color:var(--acc);background:#f3e6d6}
 .prow span{flex:1}.prow small{display:block;color:var(--mut)}.prow b{min-width:1.6rem;text-align:center}.tk{display:flex;align-items:center;gap:.3rem;font-size:.85rem}
 .seg{display:flex;gap:.5rem}.seg button{flex:1}.seg button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 .boards{display:grid;gap:.6rem;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
 .box{border:2px dashed var(--line);border-radius:12px;padding:.6rem;min-height:90px;display:flex;flex-direction:column;gap:.4rem}.box h4{margin:0;display:flex;justify-content:space-between}
-.box.pool{background:#f6f8f5}.chips{display:flex;flex-wrap:wrap;gap:.35rem;flex:1}
+.box.pool{background:var(--foam)}.chips{display:flex;flex-wrap:wrap;gap:.35rem;flex:1}
 .chip{background:#fff;border:1px solid var(--acc);border-radius:99px;padding:.3rem .7rem;font-size:.9rem;cursor:grab;user-select:none}.chip.sel{background:var(--acc);color:#fff}
 .big{font-size:1.6rem;font-weight:800}.chg{font-weight:600}.chg.neg{color:var(--bad)}
 .login{max-width:360px;margin:12vh auto;padding:1.5rem;display:flex;flex-direction:column;gap:.8rem}.login h1{font-size:2rem;margin:0}.err{color:var(--bad);min-height:1.2em}
+
+/* Cerrar sesión */
+button.out{display:inline-flex;align-items:center;gap:.4rem;background:var(--bad);border-color:#d2604d;color:#fff;font-weight:600}
+button.out:hover{background:#c94c39}button.out svg{width:18px;height:18px}
+header.top>span{display:flex;align-items:center;gap:.7rem}
+header.top{background:linear-gradient(90deg,#2b1b12,#4a2c1a)}
+/* Cargando */
+.sp{display:inline-block;width:1.05em;height:1.05em;border:3px solid #fff5;border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-.2em;margin-right:.5rem}
+.sp.big{width:46px;height:46px;border-color:#6b3f2333;border-top-color:var(--acc);margin:0 0 1rem}
+@keyframes spin{to{transform:rotate(360deg)}}
+.splash{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:70vh;color:var(--mut)}
+button:disabled{opacity:.8;cursor:progress}
+body::before{content:"";position:fixed;left:0;top:0;height:3px;width:100%;background:linear-gradient(90deg,transparent,var(--pen),transparent);transform:translateX(-100%);opacity:0;z-index:50}
+body.busy::before{opacity:1;animation:bar 1s ease-in-out infinite}
+@keyframes bar{to{transform:translateX(100%)}}
+/* Login */
+.login{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:0 12px 40px #2b1b1226;animation:pop .5s cubic-bezier(.2,.9,.3,1.2)}
+.login h1{text-align:center;font-weight:800}.login .cup{width:84px;height:84px;margin:0 auto;display:block}
+.steam path{fill:none;stroke:var(--pen);stroke-width:3;stroke-linecap:round;opacity:0;animation:steam 2.4s ease-in-out infinite}
+.steam path:nth-child(2){animation-delay:.6s}.steam path:nth-child(3){animation-delay:1.2s}
+@keyframes steam{0%{opacity:0;transform:translateY(8px)}40%{opacity:.9}100%{opacity:0;transform:translateY(-10px)}}
+@keyframes pop{from{opacity:0;transform:translateY(20px) scale(.96)}}
+.login button.pri{min-height:46px}
+/* Entradas y movimiento */
+main.in .card,main.in tr,main.in .empty{animation:rise .45s both;animation-delay:calc(var(--i,0)*45ms)}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}}
+.card{transition:transform .2s,box-shadow .2s}.card:hover{transform:translateY(-3px);box-shadow:0 10px 24px #2b1b1220}
+button{transition:transform .12s,background .2s,box-shadow .2s}button:active:not(:disabled){transform:scale(.95)}
+button.pri:hover{background:#7d4a2a}nav button:hover:not(.on){background:var(--foam)}
+.ov{animation:fade .2s}.sheet{animation:slide .3s cubic-bezier(.2,.9,.3,1)}
+@keyframes fade{from{opacity:0}}@keyframes slide{from{transform:translateY(40px);opacity:0}}
+.tag.pendiente{animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 5px #d08a2233}}
+.card li{transition:background .2s,opacity .3s}.chip{transition:transform .15s,background .2s}.chip:hover{transform:translateY(-2px)}
+@media(prefers-reduced-motion:reduce){*,::before,::after{animation:none!important;transition:none!important}}
 </style></head><body><div id="app"></div><div id="modal"></div>
 <script>
 // ===== CONFIGURACIÓN: pega aquí los datos de tu proyecto Supabase (Settings > API) =====
@@ -61,12 +96,13 @@ const itemsOf=id=>S.items.filter(i=>i.order_id===id);
 const total=id=>itemsOf(id).reduce((a,i)=>a+i.qty*i.price,0);
 const status=o=>o.paid?'pagado':itemsOf(o.id).every(i=>i.delivered)?'entregado':'pendiente';
 const can=t=>(PERMS[S.u.role]||PERMS.mesero).includes(t);
-const fail=r=>{if(r&&r.error){alert('Error: '+r.error.message);return true}};
+const fail=r=>{if(r&&r.error){document.body.classList.remove('busy');alert('Error: '+r.error.message);return true}};
 const wrap=h=>`<div class=ov><div class=sheet>${h}</div></div>`;
 const closeM=()=>{$('#modal').innerHTML='';S.d=S.p=S.sel=null};
 
 // ---------- Datos ----------
 async function load(){
+  document.body.classList.add('busy');
   const o=await sb.from('orders').select('*').is('shift_id',null).order('created_at'); if(fail(o))return;
   S.orders=o.data; const ids=S.orders.map(x=>x.id);
   const [i,p,pa,e]=await Promise.all([
@@ -78,15 +114,16 @@ async function load(){
 }
 let tm;const later=()=>{clearTimeout(tm);tm=setTimeout(load,250)};
 async function start(){
+  if(!S.u&&!$('.login'))$('#app').innerHTML='<div class=splash><span class="sp big"></span>Cargando…</div>';
   const {data:{session}}=await sb.auth.getSession();
   if(!session)return login();
   const r=await sb.from('profiles').select('*').eq('id',session.user.id).single();
   if(fail(r)||!r.data)return login('No se encontró el perfil del usuario.');
-  S.u=r.data; await load();
+  S.u=r.data; S.anim=true; await load();
   sb.channel('cafe').on('postgres_changes',{event:'*',schema:'public'},later).subscribe();
 }
 function login(msg=''){
-  $('#app').innerHTML=`<div class=login><h1>Cafetería</h1><label>Usuario<input id=lu autocomplete=username autocapitalize=none></label>
+  $('#app').innerHTML=`<div class=login><svg class=cup viewBox="0 0 84 84" aria-hidden=true><g class=steam><path d="M30 24q-5-6 0-12"/><path d="M42 24q-5-6 0-12"/><path d="M54 24q-5-6 0-12"/></g><path d="M16 36h46v18a20 20 0 0 1-20 20h-6a20 20 0 0 1-20-20z" fill="#6b3f23"/><path d="M62 42h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#6b3f23" stroke-width="5"/><ellipse cx="39" cy="36" rx="23" ry="4" fill="#d08a22"/></svg><h1>Cafetería</h1><label>Usuario<input id=lu autocomplete=username autocapitalize=none></label>
   <label>Clave<input id=lp type=password autocomplete=current-password></label><div class=err id=le>${msg}</div><button class=pri data-act=in>Ingresar</button></div>`;
 }
 
@@ -108,10 +145,13 @@ function view(){
   if(t==='productos'){return `<div class=bar><b>Productos</b><button class=pri data-act=np>+ Nuevo producto</button></div><div class=scroll><table><tr><th>Nombre</th><th>Categoría</th><th class=n>Precio</th><th></th></tr>${S.prods.map(p=>`<tr><td>${esc(p.name)}</td><td>${esc(p.category)}</td><td class=n>${money(p.price)}</td><td class=n><button data-act=ep data-id=${p.id}>Editar</button> <button class=x data-act=dp data-id=${p.id}>Eliminar</button></td></tr>`).join('')}</table></div>`}
 }
 function render(){
+  document.body.classList.remove('busy');
   if(!S.u)return;
   const tabs=PERMS[S.u.role]||PERMS.mesero; if(!tabs.includes(S.tab))S.tab=tabs[0];
-  $('#app').innerHTML=`<header class=top><h1>Cafetería</h1><span><small>${esc(S.u.username)} · ${esc(S.u.role)}</small> <button data-act=out>Salir</button></span></header>
-  <nav>${tabs.map(t=>`<button class="${t===S.tab?'on':''}" data-act=tab data-t=${t}>${TABS[t]}</button>`).join('')}</nav><main>${view()}</main>`;
+  $('#app').innerHTML=`<header class=top><h1>Cafetería</h1><span><small>${esc(S.u.username)} · ${esc(S.u.role)}</small> <button class=out data-act=out aria-label="Cerrar sesión"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>Cerrar sesión</button></span></header>
+  <nav>${tabs.map(t=>`<button class="${t===S.tab?'on':''}" data-act=tab data-t=${t}>${TABS[t]}</button>`).join('')}</nav><main class="${S.anim?'in':''}">${view()}</main>`;
+  S.anim=false;
+  document.querySelectorAll('main .card,main tr').forEach((el,i)=>el.style.setProperty('--i',Math.min(i,12)));
 }
 
 // ---------- Pedido nuevo / agregar ----------
@@ -163,10 +203,12 @@ document.addEventListener('click',async e=>{
   if(!t){const c=e.target.closest('.chip'),b=e.target.closest('.box');
     if(c){S.sel=S.sel===+c.dataset.u?null:+c.dataset.u;pm()}else if(b&&S.sel!==null)assign(S.sel,+b.dataset.p);return}
   const a=t.dataset.act,id=+t.dataset.id,D=t.dataset;
-  if(a==='in'){const r=await sb.auth.signInWithPassword({email:$('#lu').value.trim().toLowerCase()+DOM,password:$('#lp').value});
-    if(r.error)return $('#le').textContent='Usuario o clave incorrectos.';return start()}
+  if(a==='in'){t.disabled=true;t.innerHTML='<span class=sp></span>Ingresando…';$('#le').textContent='';
+    const r=await sb.auth.signInWithPassword({email:$('#lu').value.trim().toLowerCase()+DOM,password:$('#lp').value});
+    if(r.error){t.disabled=false;t.textContent='Ingresar';return $('#le').textContent='Usuario o clave incorrectos.'}
+    S.anim=true;t.innerHTML='<span class=sp></span>Cargando datos…';return start()}
   if(a==='out'){await sb.auth.signOut();S.u=null;return login()}
-  if(a==='tab'){S.tab=D.t;return render()}
+  if(a==='tab'){S.tab=D.t;S.anim=true;return render()}
   if(a==='cm')return closeM();
   if(a==='tg'){await sb.from('order_items').update({delivered:t.checked}).eq('id',id);return load()}
   if(a==='di'){if(confirm('¿Quitar este producto del pedido?')){await sb.from('order_items').delete().eq('id',id);load()}return}
