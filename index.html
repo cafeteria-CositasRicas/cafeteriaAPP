@@ -79,6 +79,7 @@ button.pri:hover{background:#7d4a2a}nav button:hover:not(.on){background:var(--f
 @keyframes pulse{50%{box-shadow:0 0 0 5px #d08a2233}}
 .card li{transition:background .2s,opacity .3s}.chip{transition:transform .15s,background .2s}.chip:hover{transform:translateY(-2px)}
 @media(prefers-reduced-motion:reduce){*,::before,::after{animation:none!important;transition:none!important}}
+.pw{position:relative}.pw input{padding-right:3rem}.pw .eye{position:absolute;right:4px;top:3px;height:36px;min-height:0;border:0;background:none;padding:0 .6rem;color:var(--mut)}.pw .eye svg{width:22px;height:22px;display:block}.pw .eye:hover{color:var(--acc)}
 </style></head><body><div id="app"></div><div id="modal"></div>
 <script>
 // ===== CONFIGURACIÓN: pega aquí los datos de tu proyecto Supabase (Settings > API) =====
@@ -90,6 +91,7 @@ const TABS={pedidos:'En cola',resumen:'Por servir',pagados:'Pagados',caja:'Caja'
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num=v=>parseFloat(String(v??'').replace(',','.'))||0;
 const money=n=>'$'+(+n||0).toFixed(2);
 let S={u:null,tab:'pedidos',prods:[],orders:[],items:[],pays:[],exps:[],d:null,p:null,sel:null};
 const itemsOf=id=>S.items.filter(i=>i.order_id===id);
@@ -124,7 +126,7 @@ async function start(){
 }
 function login(msg=''){
   $('#app').innerHTML=`<div class=login><svg class=cup viewBox="0 0 84 84" aria-hidden=true><g class=steam><path d="M30 24q-5-6 0-12"/><path d="M42 24q-5-6 0-12"/><path d="M54 24q-5-6 0-12"/></g><path d="M16 36h46v18a20 20 0 0 1-20 20h-6a20 20 0 0 1-20-20z" fill="#6b3f23"/><path d="M62 42h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#6b3f23" stroke-width="5"/><ellipse cx="39" cy="36" rx="23" ry="4" fill="#d08a22"/></svg><h1>Cafetería</h1><label>Usuario<input id=lu autocomplete=username autocapitalize=none></label>
-  <label>Clave<input id=lp type=password autocomplete=current-password></label><div class=err id=le>${msg}</div><button class=pri data-act=in>Ingresar</button></div>`;
+  <label>Clave<div class=pw><input id=lp type=password autocomplete=current-password><button type=button class=eye data-act=eye aria-label="Mostrar clave"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></label><div class=err id=le>${msg}</div><button class=pri data-act=in>Ingresar</button></div>`;
 }
 
 // ---------- Vistas ----------
@@ -174,21 +176,21 @@ async function saveDraft(){
 // ---------- Pago ----------
 const units=oid=>itemsOf(oid).flatMap(i=>Array.from({length:i.qty},()=>({n:i.name,p:+i.price,t:i.take_away})));
 const ptot=k=>{const u=units(S.p.oid);return u.reduce((a,x,i)=>a+(S.p.a[i]===k?x.p:0),0)};
-function chg(k){const p=S.p,t=ptot(k),r=+p.rc[k]||0,d=r-t;return p.mt[k]==='efectivo'?(d>=0?`Cambio a entregar: ${money(d)}`:`Falta: ${money(-d)}`):'Solo se registra la transferencia'}
+function chg(k){const p=S.p,t=ptot(k),r=num(p.rc[k]),d=r-t;return p.mt[k]==='efectivo'?(d>=0?`Cambio a entregar: ${money(d)}`:`Falta: ${money(-d)}`):'Solo se registra la transferencia'}
 function pm(){const p=S.p,u=units(p.oid),all=u.reduce((a,x)=>a+x.p,0);let h;
   if(!p.mode)h=`<h2>Pagar · ${money(all)}</h2><p>¿Cómo van a pagar?</p><div class=seg><button class=pri data-act=pmode data-v=single>Una sola cuenta</button><button data-act=pmode data-v=split>Cuenta dividida</button></div><button data-act=cm>Cancelar</button>`;
   else if(!p.n)h=`<h2>Cuenta dividida</h2><label>¿Entre cuántas personas?<input id=np type=number min=2 value=2 inputmode=numeric></label><div class=seg><button data-act=pback>Atrás</button><button class=pri data-act=pn>Continuar</button></div>`;
   else{const person=k=>`<div class=box data-p=${k}><h4><span>${p.mode==='split'?'Persona '+(k+1):'Cuenta única'}</span><b id=pt${k}>${money(ptot(k))}</b></h4>
     ${p.mode==='split'?`<div class=chips>${u.map((x,i)=>p.a[i]===k?`<span class="chip ${S.sel===i?'sel':''}" draggable=true data-u=${i}>${esc(x.n)} ${money(x.p)}</span>`:'').join('')}</div>`:''}
     <div class=seg><button class="${p.mt[k]==='efectivo'?'on':''}" data-act=mt data-k=${k} data-v=efectivo>Efectivo</button><button class="${p.mt[k]==='transferencia'?'on':''}" data-act=mt data-k=${k} data-v=transferencia>Transferencia</button></div>
-    ${p.mt[k]==='efectivo'?`<input type=number inputmode=decimal step=0.01 placeholder="Valor recibido" value="${p.rc[k]??''}" oninput="S.p.rc[${k}]=this.value;$('#cg${k}').textContent=chg(${k})">`:''}<div class=chg id=cg${k}>${chg(k)}</div></div>`;
+    ${p.mt[k]==='efectivo'?`<input type=text inputmode=decimal autocomplete=off placeholder="Valor recibido" value="${p.rc[k]??''}" oninput="S.p.rc[${k}]=this.value;$('#cg${k}').textContent=chg(${k})">`:''}<div class=chg id=cg${k}>${chg(k)}</div></div>`;
     h=`<h2>${p.mode==='split'?'Dividir cuenta · '+money(all):'Cuenta única · '+money(all)}</h2>${p.mode==='split'?`<p>Arrastra cada producto a una persona (o toca el producto y luego la persona).</p><div class="box pool" data-p=-1><h4>Sin asignar</h4><div class=chips>${u.map((x,i)=>p.a[i]===-1?`<span class="chip ${S.sel===i?'sel':''}" draggable=true data-u=${i}>${esc(x.n)} ${money(x.p)}</span>`:'').join('')}</div></div>`:''}
     <div class=boards>${Array.from({length:p.n},(_,k)=>person(k)).join('')}</div><div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=sp>Guardar pago</button></div>`}
   $('#modal').innerHTML=wrap(h);
 }
 async function savePay(){
   const p=S.p;if(p.a.includes(-1))return alert('Asigna todos los productos a una persona.');
-  const rows=[];for(let k=0;k<p.n;k++){const t=ptot(k);if(t<=0)continue;const r=+p.rc[k]||0;
+  const rows=[];for(let k=0;k<p.n;k++){const t=ptot(k);if(t<=0)continue;const r=num(p.rc[k]);
     if(p.mt[k]==='efectivo'&&r<t)return alert(`Persona ${k+1}: el valor recibido es menor al total.`);
     rows.push({order_id:p.oid,person:k+1,method:p.mt[k],amount:t,received:p.mt[k]==='efectivo'?r:null,change_given:p.mt[k]==='efectivo'?r-t:null})}
   if(fail(await sb.from('payments').insert(rows)))return;
@@ -207,6 +209,7 @@ document.addEventListener('click',async e=>{
     const r=await sb.auth.signInWithPassword({email:$('#lu').value.trim().toLowerCase()+DOM,password:$('#lp').value});
     if(r.error){t.disabled=false;t.textContent='Ingresar';return $('#le').textContent='Usuario o clave incorrectos.'}
     S.anim=true;t.innerHTML='<span class=sp></span>Cargando datos…';return start()}
+  if(a==='eye'){const i=$('#lp'),show=i.type==='password';i.type=show?'text':'password';t.innerHTML=show?`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.9 17.9A10.9 10.9 0 0 1 12 19C5 19 1 12 1 12a18 18 0 0 1 5.1-5.9M9.9 5.1A10.4 10.4 0 0 1 12 5c7 0 11 7 11 7a18 18 0 0 1-2.2 3.2M1 1l22 22"/><path d="M14.1 14.1a3 3 0 1 1-4.2-4.2"/></svg>`:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>`;t.setAttribute('aria-label',show?'Ocultar clave':'Mostrar clave');return i.focus()}
   if(a==='out'){await sb.auth.signOut();S.u=null;return login()}
   if(a==='tab'){S.tab=D.t;S.anim=true;return render()}
   if(a==='cm')return closeM();
@@ -225,12 +228,12 @@ document.addEventListener('click',async e=>{
   if(a==='mt'){S.p.mt[+D.k]=D.v;return pm()}
   if(a==='sp')return savePay();
   if(a==='np'||a==='ep'){const p=S.prods.find(x=>x.id===id)||{name:'',price:'',category:'General'};S.d={pid:a==='ep'?id:null};
-    $('#modal').innerHTML=wrap(`<h2>${a==='ep'?'Editar':'Nuevo'} producto</h2><label>Nombre<input id=pn value="${esc(p.name)}"></label><label>Categoría<input id=pc value="${esc(p.category)}"></label><label>Precio<input id=pp type=number step=0.01 inputmode=decimal value="${p.price}"></label><div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=spr>Guardar</button></div>`);return}
-  if(a==='spr'){const v={name:$('#pn').value.trim(),category:$('#pc').value.trim()||'General',price:+$('#pp').value};if(!v.name||!(v.price>=0)||$('#pp').value==='')return alert('Completa nombre y precio.');
+    $('#modal').innerHTML=wrap(`<h2>${a==='ep'?'Editar':'Nuevo'} producto</h2><label>Nombre<input id=pn value="${esc(p.name)}"></label><label>Categoría<input id=pc value="${esc(p.category)}"></label><label>Precio<input id=pp type=text inputmode=decimal autocomplete=off placeholder="0.00" value="${p.price}"></label><div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=spr>Guardar</button></div>`);return}
+  if(a==='spr'){const v={name:$('#pn').value.trim(),category:$('#pc').value.trim()||'General',price:num($('#pp').value)};if(!v.name||!(v.price>=0)||$('#pp').value==='')return alert('Completa nombre y precio.');
     const r=S.d.pid?await sb.from('products').update(v).eq('id',S.d.pid):await sb.from('products').insert(v);if(fail(r))return;closeM();return load()}
   if(a==='dp'){if(confirm('¿Eliminar este producto? Los pedidos existentes conservan su nombre y precio.')){fail(await sb.from('products').delete().eq('id',id));load()}return}
-  if(a==='exp'){$('#modal').innerHTML=wrap(`<h2>Retirar dinero de caja</h2><label>Monto<input id=ea type=number step=0.01 inputmode=decimal></label><label>Detalle de la compra<input id=ed></label><div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=se>Guardar retiro</button></div>`);return}
-  if(a==='se'){const amount=+$('#ea').value,detail=$('#ed').value.trim();if(!(amount>0)||!detail)return alert('Escribe el monto y el detalle.');
+  if(a==='exp'){$('#modal').innerHTML=wrap(`<h2>Retirar dinero de caja</h2><label>Monto<input id=ea type=text inputmode=decimal autocomplete=off placeholder="0.00"></label><label>Detalle de la compra<input id=ed></label><div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=se>Guardar retiro</button></div>`);return}
+  if(a==='se'){const amount=num($('#ea').value),detail=$('#ed').value.trim();if(!(amount>0)||!detail)return alert('Escribe el monto y el detalle.');
     if(fail(await sb.from('expenses').insert({amount,detail})))return;closeM();return load()}
   if(a==='end'){const open=S.orders.filter(o=>!o.paid).length;
     $('#modal').innerHTML=wrap(`<h2>Terminar jornada</h2>${open?`<p class=err>Hay ${open} pedido(s) sin pagar; seguirán en la cola.</p>`:''}${sumBox(cajaTot())}<div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=close>Cerrar jornada</button></div>`);return}
