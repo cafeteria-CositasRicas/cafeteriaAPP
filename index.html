@@ -81,6 +81,9 @@ button.pri:hover{background:#7d4a2a}nav button:hover:not(.on){background:var(--f
 @media(prefers-reduced-motion:reduce){*,::before,::after{animation:none!important;transition:none!important}}
 .pw{position:relative}.pw input{padding-right:3rem}.pw .eye{position:absolute;right:4px;top:3px;height:36px;min-height:0;border:0;background:none;padding:0 .6rem;color:var(--mut)}.pw .eye svg{width:22px;height:22px;display:block}.pw .eye:hover{color:var(--acc)}
 [hidden]{display:none!important}
+.chip{-webkit-user-select:none}.chip.lift{opacity:.35}
+.chip.ghost{position:fixed;z-index:100;pointer-events:none;transform:translate(-50%,-135%) scale(1.08);box-shadow:0 8px 20px #2b1b1255;background:var(--acc);color:#fff;white-space:nowrap}
+.box.over{border-style:solid;border-color:var(--acc);background:#ecd7bd}
 input[type=checkbox]{-webkit-appearance:none;appearance:none;flex:0 0 24px;width:24px;min-width:24px;max-width:24px;height:24px;min-height:24px;padding:0;margin:0;border:2px solid var(--acc);border-radius:8px;background:#fff center/16px no-repeat;cursor:pointer;transition:background-color .15s,transform .15s}
 input[type=checkbox]:checked{background-color:var(--acc);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7'/%3E%3C/svg%3E")}
 input[type=checkbox]:active{transform:scale(.88)}
@@ -222,7 +225,7 @@ function pm(){const p=S.p,u=units(p.oid),all=u.reduce((a,x)=>a+x.p,0);let h;
     ${p.mode==='split'?`<div class=chips>${u.map((x,i)=>p.a[i]===k?`<span class="chip ${S.sel===i?'sel':''}" draggable=${FINE} data-u=${i}>${esc(x.n)} ${money(x.p)}</span>`:'').join('')}</div>`:''}
     <div class=seg><button class="${p.mt[k]==='efectivo'?'on':''}" data-act=mt data-k=${k} data-v=efectivo>Efectivo</button><button class="${p.mt[k]==='transferencia'?'on':''}" data-act=mt data-k=${k} data-v=transferencia>Transferencia</button></div>
     ${p.mt[k]==='efectivo'?`<input type=text inputmode=decimal autocomplete=off placeholder="Valor recibido" value="${p.rc[k]??''}" oninput="S.p.rc[${k}]=this.value;$('#cg${k}').textContent=chg(${k})">`:''}<div class=chg id=cg${k}>${chg(k)}</div></div>`;
-    h=`<h2>${p.mode==='split'?'Dividir cuenta · '+money(all):'Cuenta única · '+money(all)}</h2>${p.mode==='split'?`<p>${FINE?'Arrastra cada producto a una persona (o toca el producto y luego la persona).':'Toca un producto de arriba y luego toca a la persona que lo paga.'}</p><div class="box pool ${S.sel!==null?'hot':''}" data-p=-1><h4>Sin asignar</h4><div class=chips>${u.map((x,i)=>p.a[i]===-1?`<span class="chip ${S.sel===i?'sel':''}" draggable=${FINE} data-u=${i}>${esc(x.n)} ${money(x.p)}</span>`:'').join('')}</div></div>`:''}
+    h=`<h2>${p.mode==='split'?'Dividir cuenta · '+money(all):'Cuenta única · '+money(all)}</h2>${p.mode==='split'?`<p>${FINE?'Arrastra cada producto a una persona (o toca el producto y luego la persona).':'Mantén presionado un producto y arrástralo a la persona. También puedes tocar el producto y luego tocar a la persona.'}</p><div class="box pool ${S.sel!==null?'hot':''}" data-p=-1><h4>Sin asignar</h4><div class=chips>${u.map((x,i)=>p.a[i]===-1?`<span class="chip ${S.sel===i?'sel':''}" draggable=${FINE} data-u=${i}>${esc(x.n)} ${money(x.p)}</span>`:'').join('')}</div></div>`:''}
     <div class=boards>${Array.from({length:p.n},(_,k)=>person(k)).join('')}</div><div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=sp>Guardar pago</button></div>`}
   setM(h,'pay');
 }
@@ -295,6 +298,24 @@ document.addEventListener('click',async e=>{
 document.addEventListener('dragstart',e=>{const c=e.target.closest('.chip');if(c)e.dataTransfer.setData('text',c.dataset.u)});
 document.addEventListener('dragover',e=>{if(e.target.closest('.box'))e.preventDefault()});
 document.addEventListener('drop',e=>{const b=e.target.closest('.box');if(!b||!S.p)return;e.preventDefault();const i=+e.dataTransfer.getData('text');if(!isNaN(i))assign(i,+b.dataset.p)});
+// Arrastre táctil (iPhone/Android): mantener presionado un producto y arrastrar
+let T=null;
+const gpos=(x,y)=>{T.g.style.left=x+'px';T.g.style.top=y+'px'};
+const tEnd=()=>{if(!T)return;clearTimeout(T.tm);clearInterval(T.sc);if(T.g)T.g.remove();document.querySelectorAll('.over').forEach(b=>b.classList.remove('over'));T.c.classList.remove('lift');T=null};
+document.addEventListener('touchstart',e=>{const c=e.target.closest('.chip');if(!c||!S.p||e.touches.length>1)return;tEnd();const t=e.touches[0];
+  T={u:+c.dataset.u,x:t.clientX,y:t.clientY,c,on:false,dy:0,tm:setTimeout(()=>{if(!T)return;T.on=true;T.g=c.cloneNode(true);T.g.className='chip ghost';document.body.appendChild(T.g);gpos(T.x,T.y);c.classList.add('lift');
+    T.sc=setInterval(()=>{const sh=document.querySelector('#modal .sheet');if(sh&&T&&T.dy)sh.scrollTop+=T.dy},16)},250)}},{passive:true});
+document.addEventListener('touchmove',e=>{if(!T)return;const t=e.touches[0];
+  if(!T.on){if(Math.hypot(t.clientX-T.x,t.clientY-T.y)>10)tEnd();return}
+  e.preventDefault();T.x=t.clientX;T.y=t.clientY;gpos(T.x,T.y);
+  document.querySelectorAll('.over').forEach(b=>b.classList.remove('over'));
+  const b=document.elementFromPoint(T.x,T.y)?.closest('.box');if(b)b.classList.add('over');
+  const pool=document.querySelector('.pool'),pb=pool?pool.getBoundingClientRect().bottom:0;
+  T.dy=T.y>innerHeight-110?12:(T.y<pb+40&&T.y>pb-5?-12:0)},{passive:false});
+document.addEventListener('touchend',e=>{if(!T)return;
+  if(T.on){if(e.cancelable)e.preventDefault();const t=e.changedTouches[0],b=document.elementFromPoint(t.clientX,t.clientY)?.closest('.box'),u=T.u;tEnd();if(b&&b.dataset.p!==undefined)assign(u,+b.dataset.p);return}
+  tEnd()},{passive:false});
+document.addEventListener('touchcancel',tEnd);
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!S.u&&e.target.id==='lp')document.querySelector('[data-act=in]').click()});
 start();
 </script></body></html>
