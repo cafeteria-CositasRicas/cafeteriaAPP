@@ -81,6 +81,10 @@ button.pri:hover{background:#7d4a2a}nav button:hover:not(.on){background:var(--f
 @media(prefers-reduced-motion:reduce){*,::before,::after{animation:none!important;transition:none!important}}
 .pw{position:relative}.pw input{padding-right:3rem}.pw .eye{position:absolute;right:4px;top:3px;height:36px;min-height:0;border:0;background:none;padding:0 .6rem;color:var(--mut)}.pw .eye svg{width:22px;height:22px;display:block}.pw .eye:hover{color:var(--acc)}
 [hidden]{display:none!important}
+.hrow{display:grid;grid-template-columns:20px 1fr auto;align-items:center;gap:.6rem;width:100%;text-align:left;border:0;background:none;border-radius:8px;padding:.7rem .2rem;min-height:48px}
+.hrow small{display:block;color:var(--mut);font-weight:400}.hrow:hover{background:var(--foam)}
+.ord{border-top:1px solid var(--line)}.det{padding:.2rem .2rem .8rem 1.6rem}.det .ttl{display:flex;justify-content:space-between;margin:.4rem 0;font-size:1.05rem}
+th{font-weight:600}
 .card li>span+.sub{padding-left:0}
 .card li{flex-wrap:wrap;gap:.2rem .5rem}.card li label{min-width:0}.card li .sub{flex-basis:100%;padding-left:34px;color:var(--mut);font-size:.9rem}
 .qt{display:flex;align-items:center;gap:.3rem}.qt button{min-height:34px;width:34px;padding:0;font-size:1.1rem}.qt b{min-width:1.4rem;text-align:center}
@@ -108,8 +112,8 @@ input[type=checkbox]:active{transform:scale(.88)}
 const SUPABASE_URL='https://egkspfelnrsumpzfdlbs.supabase.co', SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVna3NwZmVsbnJzdW1wemZkbGJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5NTc0NTYsImV4cCI6MjEwNjUzMzQ1Nn0.PHJZPk-E981l9RAg516_avPRqLKaK6btfQ796sadJRo';
 const DOM='@cafeteria.app'; // los usuarios se crean como usuario@cafeteria.app
 // ===== Niveles: para agregar uno nuevo, añade una línea con las pestañas que puede ver =====
-const PERMS={admin:['pedidos','resumen','pagados','caja','productos','usuarios'],mesero:['pedidos','resumen','pagados','caja']};
-const TABS={pedidos:'En cola',resumen:'Por servir',pagados:'Pagados',caja:'Caja',productos:'Productos',usuarios:'Usuarios'};
+const PERMS={admin:['pedidos','resumen','pagados','caja','historial','productos','usuarios'],mesero:['pedidos','resumen','pagados','caja']};
+const TABS={pedidos:'En cola',resumen:'Por servir',pagados:'Pagados',caja:'Caja',productos:'Productos',usuarios:'Usuarios',historial:'Historial',perfil:'Mi perfil'};
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const sb2=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:'tmp-admin'}});
 const FINE=matchMedia('(pointer:fine)').matches;
@@ -121,7 +125,7 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>parseFloat(String(v??'').replace(',','.'))||0;
 const money=n=>'$'+(+n||0).toFixed(2);
-let S={users:[],logs:[],u:null,tab:'pedidos',prods:[],orders:[],items:[],pays:[],exps:[],d:null,p:null,sel:null};
+let S={staff:{},h:{shifts:[],open:{},d:{},ord:{}},users:[],logs:[],u:null,tab:'pedidos',prods:[],orders:[],items:[],pays:[],exps:[],d:null,p:null,sel:null};
 const itemsOf=id=>S.items.filter(i=>i.order_id===id);
 const total=id=>itemsOf(id).reduce((a,i)=>a+i.qty*i.price,0);
 const status=o=>o.paid?'pagado':itemsOf(o.id).every(i=>i.delivered)?'entregado':'pendiente';
@@ -135,23 +139,29 @@ const closeM=()=>{$('#modal').innerHTML='';S.d=S.p=S.sel=null};
 async function load(){
   if(!S.u)return;
   document.body.classList.add('busy');
-  const [o,p,pa,e,us,lg]=await Promise.all([
+  const [o,p,pa,e,us,lg,st]=await Promise.all([
     sb.from('orders').select('*,order_items(*)').is('shift_id',null).order('created_at').order('id',{referencedTable:'order_items'}),
     sb.from('products').select('*').order('category').order('name'),
     sb.from('payments').select('*').is('shift_id',null), sb.from('expenses').select('*').is('shift_id',null),
     sb.from('profiles').select('*').order('username'),
-    sb.from('sessions_log').select('*').order('started_at',{ascending:false}).limit(60)]);
+    sb.from('sessions_log').select('*').order('started_at',{ascending:false}).limit(60),
+    sb.from('staff').select('*')]);
   if(fail(o))return;
   if(!us.error){const me=(us.data||[]).find(x=>x.id===S.u.id);if(!me||me.blocked)return forceOut(me?'Tu acceso fue bloqueado por el administrador.':'No se encontró el perfil del usuario.');S.u=me;S.users=us.data;S.logs=lg.data||[]}
   S.orders=o.data.map(({order_items,...x})=>x);S.items=o.data.flatMap(x=>x.order_items||[]);
-  S.prods=p.data||[];S.pays=pa.data||[];S.exps=e.data||[];
+  S.prods=p.data||[];S.pays=pa.data||[];S.exps=e.data||[];S.staff=Object.fromEntries((st.data||[]).map(x=>[x.id,x]));
   render();
 }
 async function loadUsers(){
-  const [us,lg]=await Promise.all([sb.from('profiles').select('*').order('username'),sb.from('sessions_log').select('*').order('started_at',{ascending:false}).limit(60)]);
-  if(!us.error&&S.u){S.users=us.data;S.logs=lg.data||[]}
+  const [us,lg,st]=await Promise.all([sb.from('profiles').select('*').order('username'),sb.from('sessions_log').select('*').order('started_at',{ascending:false}).limit(60),sb.from('staff').select('*')]);
+  if(!us.error&&S.u){S.staff=Object.fromEntries((st.data||[]).map(x=>[x.id,x]));S.users=us.data;S.logs=lg.data||[]}
   if(S.tab==='usuarios')render();
 }
+const uname=id=>S.staff[id]?.full_name||S.users.find(x=>x.id===id)?.username||'—';
+const fmtY=d=>d?new Date(d).toLocaleString('es',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
+async function loadHist(){const r=await sb.from('shifts').select('*').order('closed_at',{ascending:false}).limit(40);if(fail(r))return;S.h.shifts=r.data;if(S.tab==='historial')render()}
+async function loadShift(id){const [o,pa,ex]=await Promise.all([sb.from('orders').select('*,order_items(*)').eq('shift_id',id).order('created_at'),sb.from('payments').select('*').eq('shift_id',id).order('id'),sb.from('expenses').select('*').eq('shift_id',id).order('created_at')]);
+  if(fail(o))return;S.h.d[id]={o:o.data,p:pa.data||[],e:ex.data||[]};render()}
 let tm,tu;
 const later=p=>{
   if(p&&p.table==='sessions_log'){if(S.tab==='usuarios'){clearTimeout(tu);tu=setTimeout(loadUsers,300)}return}
@@ -190,16 +200,25 @@ function view(){
   if(t==='pagados'){const l=S.orders.filter(o=>o.paid).reverse();return `<div class=bar><b>Pedidos pagados en esta jornada</b></div>${l.length?`<div class=grid>${l.map(o=>`<article class=card><header><b>${esc(o.table_name)}</b><span class="tag pagado">pagado</span></header><ul>${itemsOf(o.id).map(i=>`<li><span>${esc(i.name)} <em>${i.take_away?'para llevar':'para servir'}</em></span><div class=sub>${i.qty} × ${money(i.price)} = <b>${money(i.qty*i.price)}</b></div></li>`).join('')}</ul><footer><b>${money(total(o.id))}</b><small>${S.pays.filter(p=>p.order_id===o.id).map(p=>p.method).join(', ')}</small></footer></article>`).join('')}</div>`:'<p class=empty>Aún no hay pedidos pagados.</p>'}`}
   if(t==='caja'){return `<div class=bar><b>Caja de la jornada</b><button data-act=exp>Retirar de caja</button><button class=pri data-act=end>Terminar jornada</button></div><div class=scroll>${sumBox(cajaTot())}</div>
     ${S.exps.length?`<h3>Retiros</h3><div class=scroll><table>${S.exps.map(x=>`<tr><td>${esc(x.detail)}</td><td class=n>${money(x.amount)}</td></tr>`).join('')}</table></div>`:''}`}
+  if(t==='historial'){const H=S.h;
+    return `<div class=bar><b>Historial de jornadas</b></div>${H.shifts.length?H.shifts.map(sh=>{const op=H.open[sh.id],d=H.d[sh.id],cash=+sh.total_cash,tr=+sh.total_transfer,ex=+sh.total_expenses;
+    return `<section class="card"><button class=hrow data-act=hs data-id=${sh.id}><span>${op?'▾':'▸'}</span><span><b>Jornada #${sh.id}</b><small>${fmtY(sh.closed_at)} · cerrada por ${esc(uname(sh.closed_by))}</small></span><b>${money(cash+tr)}</b></button>
+    ${op?(d?`${sumBox({cash,tr,ex,box:cash-ex})}${d.e.length?`<h4>Retiros de caja</h4><ul>${d.e.map(x=>`<li><span>${esc(x.detail)}<small style="display:block;color:var(--mut)">${esc(uname(x.created_by))}</small></span><b>−${money(x.amount)}</b></li>`).join('')}</ul>`:''}
+    <h4>${d.o.length} pedido(s) vendidos</h4>${d.o.map(o=>{const it=o.order_items||[],tot=it.reduce((a,i)=>a+i.qty*i.price,0),pays=d.p.filter(p=>p.order_id===o.id),paid=pays.reduce((a,p)=>a+ +p.amount,0)||tot,oo=H.ord[o.id];
+    return `<div class=ord><button class=hrow data-act=ho data-id=${o.id}><span>${oo?'▾':'▸'}</span><span><b>Pedido #${o.id}</b> · ${esc(uname(o.created_by))}<small>${fmtY(o.created_at)}</small></span><b>${money(paid)}</b></button>
+    ${oo?`<div class=det><small>Mesa o cliente: <b>${esc(o.table_name)}</b></small><ul>${it.map(i=>`<li><span>${esc(i.name)} <em>${i.take_away?'para llevar':'para servir'}</em></span><div class=sub>${i.qty} × ${money(i.price)} = <b>${money(i.qty*i.price)}</b></div></li>`).join('')}</ul><p class=ttl>Total <b>${money(tot)}</b></p>${pays.map(p=>`<small>${pays.length>1?'Persona '+p.person+' · ':''}${p.method} ${money(p.amount)}${+p.change_given>0?' · cambio '+money(p.change_given):''}</small>`).join('<br>')}</div>`:''}</div>`}).join('')}`:'<p class=empty>Cargando…</p>'):''}</section>`}).join(''):'<p class=empty>Aún no hay jornadas cerradas.</p>'}`}
+  if(t==='perfil'){const u=S.u,f=S.staff[u.id]||{},row=(k,v)=>`<tr><th>${k}</th><td>${esc(v||'—')}</td></tr>`;
+    return `<div class=bar><b>Mi perfil</b><button class=pri data-act=pf data-uid=${u.id}>Editar mis datos</button></div>${f.full_name?'':'<p>Completa tus datos con “Editar mis datos”.</p>'}<div class=scroll><table>${row('Usuario',u.username)}${row('Nivel',u.role)}${row('Nombre completo',f.full_name)}${row('Cédula',f.id_number)}${row('Teléfono',f.phone)}${row('Correo de contacto',f.contact_email)}${row('Dirección',f.address)}</table></div>`}
   if(t==='usuarios'){const now=Date.now(),on=l=>l&&!l.ended_at&&now-new Date(l.last_seen)<75000,d=l=>!l?'—':dur((on(l)?now:new Date(l.ended_at||l.last_seen))-new Date(l.started_at));
     return `<div class=bar><b>Usuarios</b><button class=pri data-act=nu>+ Nuevo usuario</button></div><div class=scroll><table><tr><th>Usuario</th><th>Nivel</th><th>Estado</th><th>Último ingreso</th><th>Tiempo conectado</th><th></th></tr>${S.users.map(u=>{const l=S.logs.find(x=>x.user_id===u.id),st=u.blocked?['Bloqueado','blocked']:on(l)?['En línea','online']:['Desconectado','offline'];
-    return `<tr><td>${esc(u.username)}</td><td>${esc(u.role)}</td><td><span class="tag ${st[1]}">${st[0]}</span></td><td>${fmt(l?.started_at)}</td><td>${d(l)}</td><td class=n>${u.id===S.u.id?'<small>(tú)</small>':`<button class="${u.blocked?'pri':''}" data-act=ub data-uid=${u.id}>${u.blocked?'Habilitar':'Bloquear'}</button> <button class=x data-act=ud data-uid=${u.id}>Eliminar</button>`}</td></tr>`}).join('')}</table></div>
+    return `<tr><td>${esc(u.username)}<small style="display:block;color:var(--mut)">${esc(S.staff[u.id]?.full_name||'')}</small></td><td>${esc(u.role)}</td><td><span class="tag ${st[1]}">${st[0]}</span></td><td>${fmt(l?.started_at)}</td><td>${d(l)}</td><td class=n><button data-act=pf data-uid=${u.id}>Perfil</button> ${u.id===S.u.id?'<small>(tú)</small>':`<button class="${u.blocked?'pri':''}" data-act=ub data-uid=${u.id}>${u.blocked?'Habilitar':'Bloquear'}</button> <button class=x data-act=ud data-uid=${u.id}>Eliminar</button>`}</td></tr>`}).join('')}</table></div>
     <h3>Historial de conexiones</h3><div class=scroll><table><tr><th>Usuario</th><th>Ingreso</th><th>Salida</th><th>Duración</th></tr>${S.logs.map(l=>`<tr><td>${esc(l.username)}</td><td>${fmt(l.started_at)}</td><td>${on(l)?'En línea':fmt(l.ended_at||l.last_seen)}</td><td>${d(l)}</td></tr>`).join('')||'<tr><td colspan=4>Sin registros</td></tr>'}</table></div>`}
   if(t==='productos'){return `<div class=bar><b>Productos</b><button class=pri data-act=np>+ Nuevo producto</button></div><div class=scroll><table><tr><th>Nombre</th><th>Categoría</th><th class=n>Precio</th><th class=n>Para llevar</th><th></th></tr>${S.prods.map(p=>`<tr><td>${esc(p.name)}</td><td>${esc(p.category)}</td><td class=n>${money(p.price)}</td><td class=n>${money(pr(p,1))}</td><td class=n><button data-act=ep data-id=${p.id}>Editar</button> <button class=x data-act=dp data-id=${p.id}>Eliminar</button></td></tr>`).join('')}</table></div>`}
 }
 function render(){
   document.body.classList.remove('busy');const y=scrollY,nl=$('nav')?.scrollLeft||0;
   if(!S.u)return;
-  const tabs=PERMS[S.u.role]||PERMS.mesero; if(!tabs.includes(S.tab))S.tab=tabs[0];
+  const tabs=[...(PERMS[S.u.role]||PERMS.mesero),'perfil']; if(!tabs.includes(S.tab))S.tab=tabs[0];
   $('#app').innerHTML=`<header class=top><h1>Cafetería</h1><span><small>${esc(S.u.username)} · ${esc(S.u.role)}</small> <button class=out data-act=out aria-label="Cerrar sesión"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>Cerrar sesión</button></span></header>
   <nav>${tabs.map(t=>`<button class="${t===S.tab?'on':''}" data-act=tab data-t=${t}>${TABS[t]}</button>`).join('')}</nav><main class="${S.anim?'in':''}">${view()}</main>`;
   scrollTo(0,S.anim?0:y);if($('nav'))$('nav').scrollLeft=nl;S.anim=false;
@@ -253,7 +272,7 @@ async function savePay(){
 
 // ---------- Eventos ----------
 function assign(i,k){S.p.a[i]=k;S.sel=null;pm()}
-const MUT=['sd','sp','se','spr','close','su'];
+const MUT=['sd','sp','se','spr','close','su','spf'];
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');
   if(t&&MUT.includes(t.dataset.act)){if(S.sv)return;S.sv=true;const h=t.innerHTML;t.disabled=true;t.innerHTML='<span class=sp></span>Guardando…';
     return onClick(e).finally(()=>{S.sv=false;if(t.isConnected){t.disabled=false;t.innerHTML=h}})}
@@ -269,7 +288,7 @@ async function onClick(e){
     S.anim=true;t.innerHTML='<span class=sp></span>Cargando datos…';return start()}
   if(a==='eye'){const i=$('#lp'),show=i.type==='password';i.type=show?'text':'password';t.innerHTML=show?`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.9 17.9A10.9 10.9 0 0 1 12 19C5 19 1 12 1 12a18 18 0 0 1 5.1-5.9M9.9 5.1A10.4 10.4 0 0 1 12 5c7 0 11 7 11 7a18 18 0 0 1-2.2 3.2M1 1l22 22"/><path d="M14.1 14.1a3 3 0 1 1-4.2-4.2"/></svg>`:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>`;t.setAttribute('aria-label',show?'Ocultar clave':'Mostrar clave');return i.focus()}
   if(a==='out')return forceOut('');
-  if(a==='tab'){S.tab=D.t;S.anim=true;render();if(D.t==='usuarios')loadUsers();return}
+  if(a==='tab'){S.tab=D.t;S.anim=true;render();if(D.t==='usuarios')loadUsers();if(D.t==='historial')loadHist();return}
   if(a==='cm')return closeM();
   if(a==='tg'){await sb.from('order_items').update({delivered:t.checked}).eq('id',id);return load()}
   if(a==='iq'){const i=S.items.find(x=>x.id===id),d=+D.d;if(!i)return;
@@ -289,6 +308,13 @@ async function onClick(e){
   if(a==='pn'){const n=Math.min(20,Math.max(2,+$('#np').value||2));S.p.n=n;S.p.mt=Array(n).fill('efectivo');return pm()}
   if(a==='mt'){S.p.mt[+D.k]=D.v;return pm()}
   if(a==='sp')return savePay();
+  if(a==='hs'){S.h.open[id]=!S.h.open[id];render();if(S.h.open[id]&&!S.h.d[id])loadShift(id);return}
+  if(a==='ho'){S.h.ord[id]=!S.h.ord[id];return render()}
+  if(a==='pf'){const u=S.users.find(x=>x.id===D.uid)||S.u,f=S.staff[u.id]||{};S.d={uid:u.id};
+    const inp=(i,l,k,x='')=>`<label>${l}<input id=${i} ${x} value="${esc(f[k]||'')}"></label>`;
+    setM(`<h2>Datos de ${esc(u.username)}</h2>${inp('f1','Nombre completo','full_name')}${inp('f2','Cédula','id_number','inputmode=numeric')}${inp('f3','Teléfono','phone','type=tel')}${inp('f4','Correo de contacto','contact_email','type=email')}${inp('f5','Dirección','address')}<div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=spf>Guardar</button></div>`);return}
+  if(a==='spf'){const v={id:S.d.uid,full_name:$('#f1').value.trim(),id_number:$('#f2').value.trim(),phone:$('#f3').value.trim(),contact_email:$('#f4').value.trim(),address:$('#f5').value.trim(),updated_at:new Date().toISOString()};
+    if(fail(await sb.from('staff').upsert(v)))return;closeM();return load()}
   if(a==='nu'){setM(`<h2>Nuevo usuario</h2><label>Usuario<input id=un autocapitalize=none autocomplete=off></label><label>Clave (mínimo 6 caracteres)<input id=up type=text autocomplete=off autocapitalize=none></label><label>Nivel<select id=ur>${Object.keys(PERMS).map(r=>`<option ${r==='mesero'?'selected':''}>${r}</option>`).join('')}</select></label><div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=su>Crear usuario</button></div>`);return}
   if(a==='su'){const un=$('#un').value.trim().toLowerCase(),pw=$('#up').value,role=$('#ur').value;
     if(!/^[a-z0-9._-]{3,30}$/.test(un))return alert('Usuario: de 3 a 30 caracteres (letras, números, punto o guion).');
