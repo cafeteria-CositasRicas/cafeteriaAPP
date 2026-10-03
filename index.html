@@ -130,34 +130,42 @@ const closeM=()=>{$('#modal').innerHTML='';S.d=S.p=S.sel=null};
 
 // ---------- Datos ----------
 async function load(){
+  if(!S.u)return;
   document.body.classList.add('busy');
-  const o=await sb.from('orders').select('*').is('shift_id',null).order('created_at'); if(fail(o))return;
-  S.orders=o.data; const ids=S.orders.map(x=>x.id);
-  const [i,p,pa,e,us,lg]=await Promise.all([
-    ids.length?sb.from('order_items').select('*').in('order_id',ids).order('id'):{data:[]},
+  const [o,p,pa,e,us,lg]=await Promise.all([
+    sb.from('orders').select('*,order_items(*)').is('shift_id',null).order('created_at').order('id',{referencedTable:'order_items'}),
     sb.from('products').select('*').order('category').order('name'),
     sb.from('payments').select('*').is('shift_id',null), sb.from('expenses').select('*').is('shift_id',null),
-    sb.from('profiles').select('*').order('username'),can('usuarios')?sb.from('sessions_log').select('*').order('started_at',{ascending:false}).limit(60):{data:[]}]);
-  if(!us.error){const me=(us.data||[]).find(x=>x.id===S.u.id);if(!me||me.blocked)return forceOut(me?'Tu acceso fue bloqueado por el administrador.':'Tu usuario fue eliminado.');S.u=me;S.users=us.data;S.logs=lg.data||[]}
-  S.items=i.data||[];S.prods=p.data||[];S.pays=pa.data||[];S.exps=e.data||[];
+    sb.from('profiles').select('*').order('username'),
+    sb.from('sessions_log').select('*').order('started_at',{ascending:false}).limit(60)]);
+  if(fail(o))return;
+  if(!us.error){const me=(us.data||[]).find(x=>x.id===S.u.id);if(!me||me.blocked)return forceOut(me?'Tu acceso fue bloqueado por el administrador.':'No se encontró el perfil del usuario.');S.u=me;S.users=us.data;S.logs=lg.data||[]}
+  S.orders=o.data.map(({order_items,...x})=>x);S.items=o.data.flatMap(x=>x.order_items||[]);
+  S.prods=p.data||[];S.pays=pa.data||[];S.exps=e.data||[];
   render();
 }
-let tm;const later=()=>{clearTimeout(tm);tm=setTimeout(load,250)};
+async function loadUsers(){
+  const [us,lg]=await Promise.all([sb.from('profiles').select('*').order('username'),sb.from('sessions_log').select('*').order('started_at',{ascending:false}).limit(60)]);
+  if(!us.error&&S.u){S.users=us.data;S.logs=lg.data||[]}
+  if(S.tab==='usuarios')render();
+}
+let tm,tu;
+const later=p=>{
+  if(p&&p.table==='sessions_log'){if(S.tab==='usuarios'){clearTimeout(tu);tu=setTimeout(loadUsers,300)}return}
+  clearTimeout(tm);tm=setTimeout(load,250)};
 async function start(){
   if(!S.u&&!$('.login'))$('#app').innerHTML='<div class=splash><span class="sp big"></span>Cargando…</div>';
   const {data:{session}}=await sb.auth.getSession();
   if(!session)return login();
-  const r=await sb.from('profiles').select('*').eq('id',session.user.id).single();
-  if(fail(r)||!r.data)return login('No se encontró el perfil del usuario.');
-  if(r.data.blocked){await sb.auth.signOut();return login('Tu acceso está bloqueado. Habla con el administrador.')}
-  S.u=r.data;S.anim=true;
-  const ss=await sb.rpc('start_session');S.sid=ss.data;
+  S.u={id:session.user.id};S.anim=true;
   await load();if(!S.u)return;
+  if(!S.u.role)return forceOut('No se pudo conectar. Intenta de nuevo.');
+  sb.rpc('start_session').then(r=>{S.sid=r.data});
   if(S.ch)sb.removeChannel(S.ch);
   S.ch=sb.channel('cafe').on('postgres_changes',{event:'*',schema:'public'},later).subscribe();
   clearInterval(hb);hb=setInterval(beat,20000);
 }
-async function beat(){if(!S.u)return;const r=await sb.rpc('heartbeat',{sid:S.sid});if(r.data===true)return forceOut('Tu acceso fue bloqueado por el administrador.');if(S.tab==='usuarios')load()}
+async function beat(){if(!S.u)return;const r=await sb.rpc('heartbeat',{sid:S.sid});if(r.data===true)return forceOut('Tu acceso fue bloqueado por el administrador.');if(S.tab==='usuarios')loadUsers()}
 async function forceOut(msg){clearInterval(hb);const sid=S.sid;S.u=null;try{await sb.rpc('end_session',{sid})}catch(e){}await sb.auth.signOut();closeM();login(msg)}
 function login(msg=''){
   $('#app').innerHTML=`<div class=login><svg class=cup viewBox="0 0 84 84" aria-hidden=true><g class=steam><path d="M30 24q-5-6 0-12"/><path d="M42 24q-5-6 0-12"/><path d="M54 24q-5-6 0-12"/></g><path d="M16 36h46v18a20 20 0 0 1-20 20h-6a20 20 0 0 1-20-20z" fill="#6b3f23"/><path d="M62 42h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#6b3f23" stroke-width="5"/><ellipse cx="39" cy="36" rx="23" ry="4" fill="#d08a22"/></svg><h1>Cafetería</h1><label>Usuario<input id=lu autocomplete=username autocapitalize=none></label>
@@ -183,7 +191,7 @@ function view(){
     return `<div class=bar><b>Usuarios</b><button class=pri data-act=nu>+ Nuevo usuario</button></div><div class=scroll><table><tr><th>Usuario</th><th>Nivel</th><th>Estado</th><th>Último ingreso</th><th>Tiempo conectado</th><th></th></tr>${S.users.map(u=>{const l=S.logs.find(x=>x.user_id===u.id),st=u.blocked?['Bloqueado','blocked']:on(l)?['En línea','online']:['Desconectado','offline'];
     return `<tr><td>${esc(u.username)}</td><td>${esc(u.role)}</td><td><span class="tag ${st[1]}">${st[0]}</span></td><td>${fmt(l?.started_at)}</td><td>${d(l)}</td><td class=n>${u.id===S.u.id?'<small>(tú)</small>':`<button class="${u.blocked?'pri':''}" data-act=ub data-uid=${u.id}>${u.blocked?'Habilitar':'Bloquear'}</button> <button class=x data-act=ud data-uid=${u.id}>Eliminar</button>`}</td></tr>`}).join('')}</table></div>
     <h3>Historial de conexiones</h3><div class=scroll><table><tr><th>Usuario</th><th>Ingreso</th><th>Salida</th><th>Duración</th></tr>${S.logs.map(l=>`<tr><td>${esc(l.username)}</td><td>${fmt(l.started_at)}</td><td>${on(l)?'En línea':fmt(l.ended_at||l.last_seen)}</td><td>${d(l)}</td></tr>`).join('')||'<tr><td colspan=4>Sin registros</td></tr>'}</table></div>`}
-  if(t==='productos'){return `<div class=bar><b>Productos</b><button class=pri data-act=np>+ Nuevo producto</button></div><div class=scroll><table><tr><th>Nombre</th><th>Categoría</th><th class=n>Precio</th><th></th></tr>${S.prods.map(p=>`<tr><td>${esc(p.name)}</td><td>${esc(p.category)}</td><td class=n>${money(p.price)}</td><td class=n><button data-act=ep data-id=${p.id}>Editar</button> <button class=x data-act=dp data-id=${p.id}>Eliminar</button></td></tr>`).join('')}</table></div>`}
+  if(t==='productos'){return `<div class=bar><b>Productos</b><button class=pri data-act=np>+ Nuevo producto</button></div><div class=scroll><table><tr><th>Nombre</th><th>Categoría</th><th class=n>Precio</th><th class=n>Para llevar</th><th></th></tr>${S.prods.map(p=>`<tr><td>${esc(p.name)}</td><td>${esc(p.category)}</td><td class=n>${money(p.price)}</td><td class=n>${money(pr(p,1))}</td><td class=n><button data-act=ep data-id=${p.id}>Editar</button> <button class=x data-act=dp data-id=${p.id}>Eliminar</button></td></tr>`).join('')}</table></div>`}
 }
 function render(){
   document.body.classList.remove('busy');const y=scrollY,nl=$('nav')?.scrollLeft||0;
@@ -196,16 +204,17 @@ function render(){
 }
 
 // ---------- Pedido nuevo / agregar ----------
-const dtotal=()=>Object.entries(S.d.l).reduce((a,[id,l])=>a+l.q*(S.prods.find(p=>p.id==id)?.price||0),0);
+const pr=(p,t)=>+p.price+(t?+p.take_extra||0:0);
+const dtotal=()=>Object.entries(S.d.l).reduce((a,[id,l])=>{const p=S.prods.find(x=>x.id==id);return a+(p?l.q*pr(p,l.t):0)},0);
 function fq(v){S.d.q=v;const q=norm(v.trim());let n=0;document.querySelectorAll('.prow').forEach(r=>{const h=!!q&&!r.dataset.n.includes(q);r.hidden=h;if(!h)n++});$('#nr').hidden=n>0}
 function dm(){const d=S.d;
   setM(`<h2>${d.oid?'Agregar a '+esc(d.tn):'Nuevo pedido'}</h2>${d.oid?'':`<input placeholder="Mesa o cliente" value="${esc(d.tn)}" oninput="S.d.tn=this.value">`}
   <div class=srch><input type=search id=sq placeholder="Buscar producto…" autocomplete=off enterkeyhint=search value="${esc(d.q||'')}" oninput="fq(this.value)"></div>
-  ${S.prods.map(p=>{const l=d.l[p.id]||{q:0};return `<div class="prow ${l.q?'on':''}" data-n="${esc(norm(p.name+' '+p.category))}" ${!d.q||norm(p.name+' '+p.category).includes(norm(d.q.trim()))?'':'hidden'}><span>${esc(p.name)}<small>${money(p.price)}</small></span><label class=tk><input type=checkbox data-act=tk data-id=${p.id} ${l.t?'checked':''}>llevar</label><button data-act=mn data-id=${p.id}>−</button><b>${l.q}</b><button data-act=pl data-id=${p.id}>+</button></div>`}).join('')||'<p class=empty>No hay productos. El administrador debe crearlos.</p>'}
+  ${S.prods.map(p=>{const l=d.l[p.id]||{q:0};return `<div class="prow ${l.q?'on':''}" data-n="${esc(norm(p.name+' '+p.category))}" ${!d.q||norm(p.name+' '+p.category).includes(norm(d.q.trim()))?'':'hidden'}><span>${esc(p.name)}<small>${money(pr(p,l.t))}${+p.take_extra&&!l.t?' · llevar '+money(pr(p,1)):''}</small></span><label class=tk><input type=checkbox data-act=tk data-id=${p.id} ${l.t?'checked':''}>llevar</label><button data-act=mn data-id=${p.id}>−</button><b>${l.q}</b><button data-act=pl data-id=${p.id}>+</button></div>`}).join('')||'<p class=empty>No hay productos. El administrador debe crearlos.</p>'}
   <p class=empty id=nr hidden>Ningún producto coincide.</p><footer class=bar><b>${money(dtotal())}</b><button data-act=cm>Cancelar</button><button class=pri data-act=sd>Guardar pedido</button></footer>`);
 }
 async function saveDraft(){
-  const d=S.d,rows=Object.entries(d.l).filter(([,l])=>l.q>0).map(([id,l])=>{const p=S.prods.find(x=>x.id==id);return{product_id:+id,name:p.name,price:p.price,qty:l.q,take_away:!!l.t,delivered:false}});
+  const d=S.d,rows=Object.entries(d.l).filter(([,l])=>l.q>0).map(([id,l])=>{const p=S.prods.find(x=>x.id==id);return{product_id:+id,name:p.name,price:pr(p,l.t),qty:l.q,take_away:!!l.t,delivered:false}});
   if(!rows.length)return alert('Agrega al menos un producto.');
   let oid=d.oid;
   if(!oid){if(!d.tn.trim())return alert('Escribe la mesa o el cliente.');
@@ -241,7 +250,12 @@ async function savePay(){
 
 // ---------- Eventos ----------
 function assign(i,k){S.p.a[i]=k;S.sel=null;pm()}
-document.addEventListener('click',async e=>{
+const MUT=['sd','sp','se','spr','close','su'];
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');
+  if(t&&MUT.includes(t.dataset.act)){if(S.sv)return;S.sv=true;const h=t.innerHTML;t.disabled=true;t.innerHTML='<span class=sp></span>Guardando…';
+    return onClick(e).finally(()=>{S.sv=false;if(t.isConnected){t.disabled=false;t.innerHTML=h}})}
+  return onClick(e)});
+async function onClick(e){
   const t=e.target.closest('[data-act]');
   if(!t){const c=e.target.closest('.chip'),b=e.target.closest('.box');
     if(c){S.sel=S.sel===+c.dataset.u?null:+c.dataset.u;pm()}else if(b&&S.sel!==null)assign(S.sel,+b.dataset.p);return}
@@ -252,7 +266,7 @@ document.addEventListener('click',async e=>{
     S.anim=true;t.innerHTML='<span class=sp></span>Cargando datos…';return start()}
   if(a==='eye'){const i=$('#lp'),show=i.type==='password';i.type=show?'text':'password';t.innerHTML=show?`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.9 17.9A10.9 10.9 0 0 1 12 19C5 19 1 12 1 12a18 18 0 0 1 5.1-5.9M9.9 5.1A10.4 10.4 0 0 1 12 5c7 0 11 7 11 7a18 18 0 0 1-2.2 3.2M1 1l22 22"/><path d="M14.1 14.1a3 3 0 1 1-4.2-4.2"/></svg>`:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>`;t.setAttribute('aria-label',show?'Ocultar clave':'Mostrar clave');return i.focus()}
   if(a==='out')return forceOut('');
-  if(a==='tab'){S.tab=D.t;S.anim=true;return render()}
+  if(a==='tab'){S.tab=D.t;S.anim=true;render();if(D.t==='usuarios')loadUsers();return}
   if(a==='cm')return closeM();
   if(a==='tg'){await sb.from('order_items').update({delivered:t.checked}).eq('id',id);return load()}
   if(a==='di'){if(confirm('¿Quitar este producto del pedido?')){await sb.from('order_items').delete().eq('id',id);load()}return}
@@ -260,7 +274,7 @@ document.addEventListener('click',async e=>{
   if(a==='new'){S.d={oid:null,tn:'',l:{}};return dm()}
   if(a==='add'){S.d={oid:id,tn:S.orders.find(o=>o.id===id).table_name,l:{}};return dm()}
   if(a==='pl'||a==='mn'){const l=S.d.l[id]||(S.d.l[id]={q:0});l.q=Math.max(0,l.q+(a==='pl'?1:-1));return dm()}
-  if(a==='tk'){(S.d.l[id]||(S.d.l[id]={q:0})).t=t.checked;return}
+  if(a==='tk'){(S.d.l[id]||(S.d.l[id]={q:0})).t=t.checked;return dm()}
   if(a==='sd')return saveDraft();
   if(a==='pay'){S.p={oid:id,mode:null,n:0,a:[],mt:[],rc:[]};return pm()}
   if(a==='pmode'){const u=units(S.p.oid);S.p.mode=D.v;if(D.v==='single'){S.p.n=1;S.p.a=u.map(()=>0);S.p.mt=['efectivo']}else{S.p.a=u.map(()=>-1)}return pm()}
@@ -280,9 +294,9 @@ document.addEventListener('click',async e=>{
     closeM();return load()}
   if(a==='ub'){const u=S.users.find(x=>x.id===D.uid);if(!confirm(u.blocked?`¿Habilitar a ${u.username}?`:`¿Bloquear a ${u.username}? Su sesión se cerrará y no podrá ingresar.`))return;fail(await sb.from('profiles').update({blocked:!u.blocked}).eq('id',u.id));return load()}
   if(a==='ud'){const u=S.users.find(x=>x.id===D.uid);if(!confirm(`¿Eliminar a ${u.username}? No podrá volver a ingresar.`))return;fail(await sb.rpc('admin_delete_user',{uid:u.id}));return load()}
-  if(a==='np'||a==='ep'){const p=S.prods.find(x=>x.id===id)||{name:'',price:'',category:'General'};S.d={pid:a==='ep'?id:null};
-    setM(`<h2>${a==='ep'?'Editar':'Nuevo'} producto</h2><label>Nombre<input id=pn value="${esc(p.name)}"></label><label>Categoría<input id=pc value="${esc(p.category)}"></label><label>Precio<input id=pp type=text inputmode=decimal autocomplete=off placeholder="0.00" value="${p.price}"></label><div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=spr>Guardar</button></div>`);return}
-  if(a==='spr'){const v={name:$('#pn').value.trim(),category:$('#pc').value.trim()||'General',price:num($('#pp').value)};if(!v.name||!(v.price>=0)||$('#pp').value==='')return alert('Completa nombre y precio.');
+  if(a==='np'||a==='ep'){const p=S.prods.find(x=>x.id===id)||{name:'',price:'',category:'General',take_extra:0};S.d={pid:a==='ep'?id:null};
+    setM(`<h2>${a==='ep'?'Editar':'Nuevo'} producto</h2><label>Nombre<input id=pn value="${esc(p.name)}"></label><label>Categoría<input id=pc value="${esc(p.category)}"></label><label>Precio<input id=pp type=text inputmode=decimal autocomplete=off placeholder="0.00" value="${p.price}"></label><label>Recargo para llevar (se suma al precio)<input id=pt type=text inputmode=decimal autocomplete=off placeholder="0.00" value="${p.take_extra||''}"></label><div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=spr>Guardar</button></div>`);return}
+  if(a==='spr'){const v={name:$('#pn').value.trim(),category:$('#pc').value.trim()||'General',price:num($('#pp').value),take_extra:num($('#pt').value)};if(!v.name||!(v.price>=0)||$('#pp').value==='')return alert('Completa nombre y precio.');
     const r=S.d.pid?await sb.from('products').update(v).eq('id',S.d.pid):await sb.from('products').insert(v);if(fail(r))return;closeM();return load()}
   if(a==='dp'){if(confirm('¿Eliminar este producto? Los pedidos existentes conservan su nombre y precio.')){fail(await sb.from('products').delete().eq('id',id));load()}return}
   if(a==='exp'){setM(`<h2>Retirar dinero de caja</h2><label>Monto<input id=ea type=text inputmode=decimal autocomplete=off placeholder="0.00"></label><label>Detalle de la compra<input id=ed></label><div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=se>Guardar retiro</button></div>`);return}
@@ -293,7 +307,7 @@ document.addEventListener('click',async e=>{
   if(a==='close'){const T=cajaTot(),r=await sb.from('shifts').insert({closed_by:S.u.id,total_cash:T.cash,total_transfer:T.tr,total_expenses:T.ex}).select().single();if(fail(r))return;
     const s=r.data.id;await Promise.all([sb.from('payments').update({shift_id:s}).is('shift_id',null),sb.from('expenses').update({shift_id:s}).is('shift_id',null),sb.from('orders').update({shift_id:s}).eq('paid',true).is('shift_id',null)]);
     setM(`<h2>Jornada cerrada</h2>${sumBox(T)}<button class=pri data-act=cm>Listo</button>`);return load()}
-});
+}
 // Arrastrar y soltar
 document.addEventListener('dragstart',e=>{const c=e.target.closest('.chip');if(c)e.dataTransfer.setData('text',c.dataset.u)});
 document.addEventListener('dragover',e=>{if(e.target.closest('.box'))e.preventDefault()});
