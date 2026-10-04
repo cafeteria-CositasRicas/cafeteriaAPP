@@ -130,7 +130,8 @@ let S={staff:{},h:{shifts:[],open:{},d:{},ord:{}},users:[],logs:[],u:null,tab:'p
 const itemsOf=id=>S.items.filter(i=>i.order_id===id);
 const total=id=>itemsOf(id).reduce((a,i)=>a+i.qty*i.price,0);
 const status=o=>itemsOf(o.id).every(i=>i.delivered)?'entregado':'pendiente';
-const done=o=>o.paid&&status(o)==='entregado';
+const isPaid=o=>{const it=itemsOf(o.id);return it.length>0&&it.every(i=>i.paid)};
+const done=o=>isPaid(o)&&status(o)==='entregado';
 const paidAmt=id=>itemsOf(id).filter(i=>i.paid).reduce((a,i)=>a+i.qty*i.price,0);
 const can=t=>(PERMS[S.u.role]||PERMS.mesero).includes(t);
 const fail=r=>{if(r&&r.error){document.body.classList.remove('busy');alert('Error: '+r.error.message);return true}};
@@ -190,9 +191,9 @@ function login(msg=''){
 
 // ---------- Vistas ----------
 function card(o){const it=itemsOf(o.id),st=status(o);
-  return `<article class=card><header><b>${esc(o.table_name)}</b><span class=tags><span class="tag ${st}">${st}</span>${o.paid?'<span class="tag cobrado">cobrado</span>':paidAmt(o.id)>0?'<span class="tag parcial">cobro parcial</span>':''}</span></header><ul>
+  return `<article class=card><header><b>${esc(o.table_name)}</b><span class=tags><span class="tag ${st}">${st}</span>${isPaid(o)?'<span class="tag cobrado">cobrado</span>':paidAmt(o.id)>0?'<span class="tag parcial">cobro parcial</span>':''}</span></header><ul>
   ${it.map(i=>`<li class="${i.delivered?'done':''}"><label><input type=checkbox data-act=tg data-id=${i.id} ${i.delivered?'checked':''}> <span>${esc(i.name)} <em>${i.take_away?'para llevar':'para servir'}${i.paid?' · cobrado':''}</em></span></label><div class=qt><button data-act=iq data-id=${i.id} data-d=-1 ${i.qty<2?'disabled':''} aria-label="Menos">−</button><b>${i.qty}</b><button data-act=iq data-id=${i.id} data-d=1 aria-label="Más">+</button></div><button class=x data-act=di data-id=${i.id} aria-label="Quitar">✕</button><div class=sub>${i.qty} × ${money(i.price)} = <b>${money(i.qty*i.price)}</b></div></li>`).join('')}</ul>
-  <footer><b>${money(total(o.id))}</b><button data-act=add data-id=${o.id}>Agregar</button>${o.paid?'':`<button class=pri data-act=pay data-id=${o.id}>${paidAmt(o.id)>0?'Cobrar saldo':'Pagar'}</button>`}<button class=x data-act=do data-id=${o.id}>Eliminar</button></footer></article>`}
+  <footer><b>${money(total(o.id))}</b><button data-act=add data-id=${o.id}>Agregar</button>${isPaid(o)?'':`<button class=pri data-act=pay data-id=${o.id}>${paidAmt(o.id)>0?'Cobrar saldo':'Pagar'}</button>`}<button class=x data-act=do data-id=${o.id}>Eliminar</button></footer></article>`}
 const cajaTot=()=>{const f=m=>S.pays.filter(p=>p.method===m).reduce((a,p)=>a+ +p.amount,0),ex=S.exps.reduce((a,x)=>a+ +x.amount,0);return{cash:f('efectivo'),tr:f('transferencia'),ex,box:f('efectivo')-ex}};
 const sumBox=t=>`<table><tr><td>Pagos en efectivo</td><td class=n>${money(t.cash)}</td></tr><tr><td>Pagos por transferencia</td><td class=n>${money(t.tr)}</td></tr><tr><td>Retiros de caja (compras)</td><td class=n>−${money(t.ex)}</td></tr><tr><th>Efectivo que debe haber en caja</th><th class=n>${money(t.box)}</th></tr><tr><th>Total vendido</th><th class=n>${money(t.cash+t.tr)}</th></tr></table>`;
 function view(){
@@ -302,7 +303,7 @@ async function onClick(e){
     if(d>0&&(i.delivered||i.paid)){const tw=S.items.find(x=>x.order_id===i.order_id&&!x.delivered&&!x.paid&&x.product_id===i.product_id&&x.take_away===i.take_away&&+x.price===+i.price);
       fail(tw?await sb.from('order_items').update({qty:tw.qty+1}).eq('id',tw.id):await sb.from('order_items').insert({order_id:i.order_id,product_id:i.product_id,name:i.name,price:i.price,qty:1,take_away:i.take_away,delivered:false}));await sb.from('orders').update({paid:false}).eq('id',i.order_id);return load()}
     if(i.qty+d<1)return;i.qty+=d;render();fail(await sb.from('order_items').update({qty:i.qty}).eq('id',id));return}
-  if(a==='di'){const it=S.items.find(x=>x.id===id);if(it?.paid&&S.u.role!=='admin')return alert('Este producto ya fue cobrado. Solo el administrador puede quitarlo.');if(confirm(it?.paid?'Este producto YA fue cobrado. ¿Quitarlo de todos modos?':'¿Quitar este producto del pedido?')){await sb.from('order_items').delete().eq('id',id);load()}return}
+  if(a==='di'){const it=S.items.find(x=>x.id===id);if(it?.paid&&S.u.role!=='admin')return alert('Este producto ya fue cobrado. Solo el administrador puede quitarlo.');if(confirm(it?.paid?'Este producto YA fue cobrado. ¿Quitarlo de todos modos?':'¿Quitar este producto del pedido?')){const oid=it?.order_id;await sb.from('order_items').delete().eq('id',id);if(oid){const rest=itemsOf(oid).filter(x=>x.id!==id);await sb.from('orders').update({paid:rest.length>0&&rest.every(x=>x.paid)}).eq('id',oid)}load()}return}
   if(a==='do'){const cob=itemsOf(id).some(i=>i.paid);if(cob&&S.u.role!=='admin')return alert('Este pedido ya tiene pagos registrados. Solo el administrador puede eliminarlo.');if(confirm(cob?'Este pedido tiene pagos registrados; se borrarán también y cambiará la caja. ¿Eliminarlo?':'¿Eliminar el pedido completo?')){await sb.from('orders').delete().eq('id',id);load()}return}
   if(a==='new'){S.d={oid:null,tn:'',l:{}};return dm()}
   if(a==='add'){S.d={oid:id,tn:S.orders.find(o=>o.id===id).table_name,l:{}};return dm()}
