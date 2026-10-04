@@ -157,8 +157,8 @@ async function load(){
   render();
 }
 async function loadUsers(){
-  const [us,lg,st]=await Promise.all([sb.from('profiles').select('*').order('username'),sb.from('sessions_log').select('*').order('started_at',{ascending:false}).limit(60),sb.from('staff').select('*')]);
-  if(!us.error&&S.u){S.staff=Object.fromEntries((st.data||[]).map(x=>[x.id,x]));S.users=us.data;S.logs=lg.data||[]}
+  const [us,lg,st,ev]=await Promise.all([sb.from('profiles').select('*').order('username'),sb.from('sessions_log').select('*').order('started_at',{ascending:false}).limit(60),sb.from('staff').select('*'),sb.from('audit_log').select('*').order('at',{ascending:false}).limit(S.evN||200)]);
+  if(!us.error&&S.u){S.staff=Object.fromEntries((st.data||[]).map(x=>[x.id,x]));S.users=us.data;S.logs=lg.data||[];S.events=ev.data||[]}
   if(S.tab==='usuarios')render();
 }
 const uname=id=>S.staff[id]?.full_name||S.users.find(x=>x.id===id)?.username||'—';
@@ -168,7 +168,7 @@ async function loadShift(id){const [o,pa,ex]=await Promise.all([sb.from('orders'
   if(fail(o))return;S.h.d[id]={o:o.data,p:pa.data||[],e:ex.data||[]};render()}
 let tm,tu;
 const later=p=>{
-  if(p&&p.table==='sessions_log'){if(S.tab==='usuarios'){clearTimeout(tu);tu=setTimeout(loadUsers,300)}return}
+  if(p&&(p.table==='sessions_log'||p.table==='audit_log')){if(S.tab==='usuarios'){clearTimeout(tu);tu=setTimeout(loadUsers,300)}return}
   clearTimeout(tm);tm=setTimeout(load,250)};
 async function start(){
   if(!S.u&&!$('.login'))$('#app').innerHTML='<div class=splash><span class="sp big"></span>Cargando…</div>';
@@ -216,7 +216,10 @@ function view(){
   if(t==='usuarios'){const now=Date.now(),on=l=>l&&!l.ended_at&&now-new Date(l.last_seen)<75000,d=l=>!l?'—':dur((on(l)?now:new Date(l.ended_at||l.last_seen))-new Date(l.started_at));
     return `<div class=bar><b>Usuarios</b><button class=pri data-act=nu>+ Nuevo usuario</button></div><div class=scroll><table><tr><th>Usuario</th><th>Nivel</th><th>Estado</th><th>Último ingreso</th><th>Tiempo conectado</th><th></th></tr>${S.users.map(u=>{const l=S.logs.find(x=>x.user_id===u.id),st=u.blocked?['Bloqueado','blocked']:on(l)?['En línea','online']:['Desconectado','offline'];
     return `<tr><td>${esc(u.username)}<small style="display:block;color:var(--mut)">${esc(S.staff[u.id]?.full_name||'')}</small></td><td>${esc(u.role)}</td><td><span class="tag ${st[1]}">${st[0]}</span></td><td>${fmt(l?.started_at)}</td><td>${d(l)}</td><td class=n><button data-act=pf data-uid=${u.id}>Perfil</button> ${u.id===S.u.id?'<small>(tú)</small>':`<button class="${u.blocked?'pri':''}" data-act=ub data-uid=${u.id}>${u.blocked?'Habilitar':'Bloquear'}</button> <button class=x data-act=ud data-uid=${u.id}>Eliminar</button>`}</td></tr>`}).join('')}</table></div>
-    <h3>Historial de conexiones</h3><div class=scroll><table><tr><th>Usuario</th><th>Ingreso</th><th>Salida</th><th>Duración</th></tr>${S.logs.map(l=>`<tr><td>${esc(l.username)}</td><td>${fmt(l.started_at)}</td><td>${on(l)?'En línea':fmt(l.ended_at||l.last_seen)}</td><td>${d(l)}</td></tr>`).join('')||'<tr><td colspan=4>Sin registros</td></tr>'}</table></div>`}
+    <h3>Historial de conexiones</h3><div class=scroll><table><tr><th>Usuario</th><th>Ingreso</th><th>Salida</th><th>Duración</th></tr>${S.logs.map(l=>`<tr><td>${esc(l.username)}</td><td>${fmt(l.started_at)}</td><td>${on(l)?'En línea':fmt(l.ended_at||l.last_seen)}</td><td>${d(l)}</td></tr>`).join('')||'<tr><td colspan=4>Sin registros</td></tr>'}</table></div>
+    <h3>Registro de eventos</h3><p style="margin:0 0 .6rem;color:var(--mut)">Todo lo que se hace en el sistema, con el usuario, la fecha y la hora.</p>
+    <div class=scroll><table><tr><th>Fecha</th><th>Hora</th><th>Usuario</th><th>Evento</th></tr>${(S.events||[]).map(e=>`<tr><td>${new Date(e.at).toLocaleDateString('es',{day:'2-digit',month:'short',year:'numeric'})}</td><td>${new Date(e.at).toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</td><td>${esc(e.username)}</td><td>${esc(e.action)}</td></tr>`).join('')||'<tr><td colspan=4>Aún no hay eventos registrados.</td></tr>'}</table></div>
+    ${(S.events||[]).length>=(S.evN||200)?'<div class=bar style="margin-top:.8rem"><button data-act=evm>Ver más eventos</button></div>':''}`}
   if(t==='productos'){const mq=S.prods.filter(p=>!S.pq||norm(p.name+' '+p.category).includes(norm(S.pq.trim()))).length;return `<div class=bar><b>Productos <small id=pc>${S.pq&&S.pq.trim()?`(${mq} de ${S.prods.length})`:`(${S.prods.length})`}</small></b><button class=pri data-act=np>+ Nuevo producto</button></div><div style="margin-bottom:.8rem"><input type=search id=pq placeholder="Buscar producto por nombre o categoría…" autocomplete=off enterkeyhint=search value="${esc(S.pq||'')}" oninput="fp(this.value)"></div><div class=scroll><table id=ptab><tr><th>Nombre</th><th>Categoría</th><th class=n>Precio</th><th class=n>Para llevar</th><th></th></tr>${S.prods.map(p=>`<tr data-n="${esc(norm(p.name+' '+p.category))}" ${!S.pq||norm(p.name+' '+p.category).includes(norm(S.pq.trim()))?'':'hidden'}><td>${esc(p.name)}</td><td>${esc(p.category)}</td><td class=n>${money(p.price)}</td><td class=n>${money(pr(p,1))}</td><td class=n><button data-act=ep data-id=${p.id}>Editar</button> <button class=x data-act=dp data-id=${p.id}>Eliminar</button></td></tr>`).join('')}</table></div><p class=empty id=pnr ${S.pq&&S.pq.trim()&&!mq?'':'hidden'}>Ningún producto coincide.</p>`}
 }
 function render(){
@@ -325,6 +328,7 @@ async function onClick(e){
     setM(`<h2>Datos de ${esc(u.username)}</h2>${inp('f1','Nombre completo','full_name')}${inp('f2','Cédula','id_number','inputmode=numeric')}${inp('f3','Teléfono','phone','type=tel')}${inp('f4','Correo de contacto','contact_email','type=email')}${inp('f5','Dirección','address')}<div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=spf>Guardar</button></div>`);return}
   if(a==='spf'){const v={id:S.d.uid,full_name:$('#f1').value.trim(),id_number:$('#f2').value.trim(),phone:$('#f3').value.trim(),contact_email:$('#f4').value.trim(),address:$('#f5').value.trim(),updated_at:new Date().toISOString()};
     if(fail(await sb.from('staff').upsert(v)))return;closeM();return load()}
+  if(a==='evm'){S.evN=(S.evN||200)+200;return loadUsers()}
   if(a==='nu'){setM(`<h2>Nuevo usuario</h2><label>Usuario<input id=un autocapitalize=none autocomplete=off></label><label>Clave (mínimo 6 caracteres)<input id=up type=text autocomplete=off autocapitalize=none></label><label>Nivel<select id=ur>${Object.keys(PERMS).map(r=>`<option ${r==='mesero'?'selected':''}>${r}</option>`).join('')}</select></label><div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=su>Crear usuario</button></div>`);return}
   if(a==='su'){const un=$('#un').value.trim().toLowerCase(),pw=$('#up').value,role=$('#ur').value;
     if(!/^[a-z0-9._-]{3,30}$/.test(un))return alert('Usuario: de 3 a 30 caracteres (letras, números, punto o guion).');
@@ -334,6 +338,7 @@ async function onClick(e){
     const r=await sb2.auth.signUp({email:un+DOM,password:pw});
     if(r.error||!r.data.user){t.disabled=false;t.textContent='Crear usuario';return alert('Error: '+(r.error?.message||'no se pudo crear'))}
     if(role!=='mesero')fail(await sb.from('profiles').update({role}).eq('id',r.data.user.id));
+    sb.rpc('log_event',{p_action:`Creó el usuario ${un} (nivel ${role})`});
     closeM();return load()}
   if(a==='ub'){const u=S.users.find(x=>x.id===D.uid);if(!confirm(u.blocked?`¿Habilitar a ${u.username}?`:`¿Bloquear a ${u.username}? Su sesión se cerrará y no podrá ingresar.`))return;fail(await sb.from('profiles').update({blocked:!u.blocked}).eq('id',u.id));return load()}
   if(a==='ud'){const u=S.users.find(x=>x.id===D.uid);if(!confirm(`¿Eliminar a ${u.username}? No podrá volver a ingresar.`))return;fail(await sb.rpc('admin_delete_user',{uid:u.id}));return load()}
