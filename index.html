@@ -81,6 +81,7 @@ button.pri:hover{background:#7d4a2a}nav button:hover:not(.on){background:var(--f
 @media(prefers-reduced-motion:reduce){*,::before,::after{animation:none!important;transition:none!important}}
 .pw{position:relative}.pw input{padding-right:3rem}.pw .eye{position:absolute;right:4px;top:3px;height:36px;min-height:0;border:0;background:none;padding:0 .6rem;color:var(--mut)}.pw .eye svg{width:22px;height:22px;display:block}.pw .eye:hover{color:var(--acc)}
 [hidden]{display:none!important}
+.tag.listo{background:#3f6f8f}button.hnd{background:var(--ok);border-color:var(--ok);color:#fff;font-weight:600}
 td.nw{white-space:nowrap}
 @media(max-width:700px){
 .pt,.pt tbody{display:block;width:100%;background:none}
@@ -165,7 +166,7 @@ const money=n=>'$'+(+n||0).toFixed(2);
 let S={staff:{},h:{shifts:[],open:{},d:{},ord:{}},users:[],logs:[],u:null,tab:'pedidos',prods:[],orders:[],items:[],pays:[],exps:[],d:null,p:null,sel:null};
 const itemsOf=id=>S.items.filter(i=>i.order_id===id);
 const total=id=>itemsOf(id).reduce((a,i)=>a+i.qty*i.price,0);
-const status=o=>itemsOf(o.id).every(i=>i.delivered)?'entregado':'pendiente';
+const status=o=>{const it=itemsOf(o.id);if(!it.every(i=>i.delivered))return 'pendiente';return it.some(i=>i.take_away&&!i.handed)?'listo':'entregado'};
 const isPaid=o=>{const it=itemsOf(o.id);return it.length>0&&it.every(i=>i.paid)};
 const done=o=>isPaid(o)&&status(o)==='entregado';
 const paidAmt=id=>itemsOf(id).filter(i=>i.paid).reduce((a,i)=>a+i.qty*i.price,0);
@@ -251,14 +252,14 @@ function login(msg=''){
 
 // ---------- Vistas ----------
 function card(o){const it=itemsOf(o.id),st=status(o);
-  return `<article class=card><header><b>${esc(o.table_name)}</b><span class=tags><span class="tag ${st}">${st}</span>${isPaid(o)?'<span class="tag cobrado">cobrado</span>':paidAmt(o.id)>0?'<span class="tag parcial">cobro parcial</span>':''}</span></header><ul>
+  return `<article class=card><header><b>${esc(o.table_name)}</b><span class=tags><span class="tag ${st}">${st==='listo'?'listo para retirar':st}</span>${isPaid(o)?'<span class="tag cobrado">cobrado</span>':paidAmt(o.id)>0?'<span class="tag parcial">cobro parcial</span>':''}</span></header><ul>
   ${it.map(i=>`<li class="${i.delivered?'done':''}"><label><input type=checkbox data-act=tg data-id=${i.id} ${i.delivered?'checked':''}> <span>${esc(i.name)} <em>${i.take_away?'para llevar':'para servir'}${i.paid?' · cobrado':''}</em></span></label><div class=qt><button data-act=iq data-id=${i.id} data-d=-1 ${i.qty<2?'disabled':''} aria-label="Menos">−</button><b>${i.qty}</b><button data-act=iq data-id=${i.id} data-d=1 aria-label="Más">+</button></div><button class=x data-act=di data-id=${i.id} aria-label="Quitar">✕</button><div class=sub>${i.qty} × ${money(i.price)} = <b>${money(i.qty*i.price)}</b></div></li>`).join('')}</ul>
-  <footer><b>${money(total(o.id))}</b><button data-act=add data-id=${o.id}>Agregar</button>${isPaid(o)?'':`<button class=pri data-act=pay data-id=${o.id}>${paidAmt(o.id)>0?'Cobrar saldo':'Pagar'}</button>`}<button class=x data-act=do data-id=${o.id}>Eliminar</button></footer></article>`}
+  <footer><b>${money(total(o.id))}</b>${st==='listo'&&isPaid(o)?`<button class=hnd data-act=hand data-id=${o.id}>Entregar</button>`:''}<button data-act=add data-id=${o.id}>Agregar</button>${isPaid(o)?'':`<button class=pri data-act=pay data-id=${o.id}>${paidAmt(o.id)>0?'Cobrar saldo':'Pagar'}</button>`}<button class=x data-act=do data-id=${o.id}>Eliminar</button></footer></article>`}
 const cajaTot=()=>{const f=m=>S.pays.filter(p=>p.method===m).reduce((a,p)=>a+ +p.amount,0),ex=S.exps.reduce((a,x)=>a+ +x.amount,0);return{cash:f('efectivo'),tr:f('transferencia'),ex,box:f('efectivo')-ex}};
 const sumBox=t=>`<table><tr><td>Pagos en efectivo</td><td class=n>${money(t.cash)}</td></tr><tr><td>Pagos por transferencia</td><td class=n>${money(t.tr)}</td></tr><tr><td>Retiros de caja (compras)</td><td class=n>−${money(t.ex)}</td></tr><tr><th>Efectivo que debe haber en caja</th><th class=n>${money(t.box)}</th></tr><tr><th>Total vendido</th><th class=n>${money(t.cash+t.tr)}</th></tr></table>`;
 function view(){
   const t=S.tab;
-  if(t==='pedidos'){const l=S.orders.filter(o=>!done(o));return `<div class=bar><b>${l.length} pedido(s) en cola</b><button class=pri data-act=new>+ Nuevo pedido</button></div>${l.length?`<div class=grid>${l.map(card).join('')}</div>`:'<p class=empty>No hay pedidos en cola. Crea uno con “Nuevo pedido”.</p>'}`}
+  if(t==='pedidos'){const l=S.orders.filter(o=>!done(o)),nl=l.filter(o=>status(o)==='listo').length;return `<div class=bar><b>${l.length} pedido(s) en cola${nl?` · ${nl} listo(s) para retirar`:''}</b><button class=pri data-act=new>+ Nuevo pedido</button></div>${l.length?`<div class=grid>${l.map(card).join('')}</div>`:'<p class=empty>No hay pedidos en cola. Crea uno con “Nuevo pedido”.</p>'}`}
   if(t==='resumen'){const g={};S.items.filter(i=>!i.delivered).forEach(i=>{const r=g[i.name]||(g[i.name]={s:0,l:0});r[i.take_away?'l':'s']+=i.qty});
     const k=Object.keys(g).sort();return `<div class=bar><b>Pendiente por entregar, sumando todos los pedidos</b></div>${k.length?`<div class=scroll><table><tr><th>Producto</th><th class=n>Servir</th><th class=n>Llevar</th><th class=n>Total</th></tr>${k.map(n=>`<tr><td>${esc(n)}</td><td class=n>${g[n].s}</td><td class=n>${g[n].l}</td><td class=n><b>${g[n].s+g[n].l}</b></td></tr>`).join('')}</table></div>`:'<p class=empty>No hay nada pendiente por entregar.</p>'}`}
   if(t==='pagados'){const l=S.orders.filter(done).reverse();return `<div class=bar><b>Pedidos pagados en esta jornada</b></div>${l.length?`<div class=grid>${l.map(o=>`<article class=card><header><b>${esc(o.table_name)}</b><span class="tag pagado">pagado</span></header><ul>${itemsOf(o.id).map(i=>`<li><span>${esc(i.name)} <em>${i.take_away?'para llevar':'para servir'}</em></span><div class=sub>${i.qty} × ${money(i.price)} = <b>${money(i.qty*i.price)}</b></div></li>`).join('')}</ul><footer><b>${money(total(o.id))}</b><small>${S.pays.filter(p=>p.order_id===o.id).map(p=>p.method).join(', ')}</small></footer></article>`).join('')}</div>`:'<p class=empty>Aún no hay pedidos pagados.</p>'}`}
@@ -317,6 +318,7 @@ async function saveDraft(){
 }
 
 // ---------- Pago ----------
+const ASKMSG='Este pedido tiene productos para llevar.\n\n¿Ya se los entregaste al cliente?\n\nAceptar = Sí, ya los entregué\nCancelar = No (no se hace nada)';
 const units=oid=>itemsOf(oid).filter(i=>S.p.ids.includes(i.id)).flatMap(i=>Array.from({length:i.qty},()=>({n:i.name,p:+i.price,t:i.take_away})));
 const ptot=k=>{const u=units(S.p.oid);return u.reduce((a,x,i)=>a+(S.p.a[i]===k?x.p:0),0)};
 function chg(k){const p=S.p,t=ptot(k),r=num(p.rc[k]),d=r-t;return p.mt[k]==='efectivo'?(d>=0?`Cambio a entregar: ${money(d)}`:`Falta: ${money(-d)}`):'Solo se registra la transferencia'}
@@ -336,7 +338,9 @@ async function savePay(){
   const rows=[];for(let k=0;k<p.n;k++){const t=ptot(k);if(t<=0)continue;const r=num(p.rc[k]);
     if(p.mt[k]==='efectivo'&&r<t)return alert(`Persona ${k+1}: el valor recibido es menor al total.`);
     rows.push({order_id:p.oid,person:k+1,method:p.mt[k],amount:t,received:p.mt[k]==='efectivo'?r:null,change_given:p.mt[k]==='efectivo'?r-t:null})}
+  if(p.ask&&!p.ok){if(!confirm(ASKMSG))return closeM();p.ok=true}
   if(fail(await sb.from('payments').insert(rows)))return;
+  if(p.ok){const hid=itemsOf(p.oid).filter(i=>i.take_away&&!i.handed).map(i=>i.id);if(hid.length&&fail(await sb.from('order_items').update({delivered:true,handed:true}).in('id',hid)))return}
   if(fail(await sb.from('order_items').update({paid:true}).in('id',p.ids)))return;
   const rem=await sb.from('order_items').select('id',{count:'exact',head:true}).eq('order_id',p.oid).eq('paid',false);
   if(fail(await sb.from('orders').update({paid:rem.count===0,paid_at:new Date().toISOString()}).eq('id',p.oid)))return;
@@ -363,12 +367,14 @@ async function onClick(e){
   if(a==='out')return forceOut('');
   if(a==='tab'){S.tab=D.t;S.anim=true;render();if(D.t==='usuarios')loadUsers();if(D.t==='historial')loadHist();return}
   if(a==='cm')return closeM();
-  if(a==='tg'){await sb.from('order_items').update({delivered:t.checked}).eq('id',id);return load()}
+  if(a==='tg'){await sb.from('order_items').update({delivered:t.checked,...(t.checked?{}:{handed:false})}).eq('id',id);return load()}
   if(a==='iq'){const i=S.items.find(x=>x.id===id),d=+D.d;if(!i)return;
     if(d<0&&i.paid)return alert('Este producto ya fue cobrado; no se puede reducir.');
     if(d>0&&(i.delivered||i.paid)){const tw=S.items.find(x=>x.order_id===i.order_id&&!x.delivered&&!x.paid&&x.product_id===i.product_id&&x.take_away===i.take_away&&+x.price===+i.price);
       fail(tw?await sb.from('order_items').update({qty:tw.qty+1}).eq('id',tw.id):await sb.from('order_items').insert({order_id:i.order_id,product_id:i.product_id,name:i.name,price:i.price,qty:1,take_away:i.take_away,delivered:false}));await sb.from('orders').update({paid:false}).eq('id',i.order_id);return load()}
     if(i.qty+d<1)return;i.qty+=d;render();fail(await sb.from('order_items').update({qty:i.qty}).eq('id',id));return}
+  if(a==='hand'){if(!isPaid(S.orders.find(o=>o.id===id)))return alert('Primero debes cobrar el pedido.');const ids=itemsOf(id).filter(i=>i.take_away&&!i.handed).map(i=>i.id);if(!ids.length)return;
+    if(!confirm('¿El cliente ya retiró el pedido?'))return;fail(await sb.from('order_items').update({handed:true}).in('id',ids));return load()}
   if(a==='di'){const it=S.items.find(x=>x.id===id);if(it?.paid&&S.u.role!=='admin')return alert('Este producto ya fue cobrado. Solo el administrador puede quitarlo.');if(confirm(it?.paid?'Este producto YA fue cobrado. ¿Quitarlo de todos modos?':'¿Quitar este producto del pedido?')){const oid=it?.order_id;await sb.from('order_items').delete().eq('id',id);if(oid){const rest=itemsOf(oid).filter(x=>x.id!==id);await sb.from('orders').update({paid:rest.length>0&&rest.every(x=>x.paid)}).eq('id',oid)}load()}return}
   if(a==='do'){const cob=itemsOf(id).some(i=>i.paid);if(cob&&S.u.role!=='admin')return alert('Este pedido ya tiene pagos registrados. Solo el administrador puede eliminarlo.');if(confirm(cob?'Este pedido tiene pagos registrados; se borrarán también y cambiará la caja. ¿Eliminarlo?':'¿Eliminar el pedido completo?')){await sb.from('orders').delete().eq('id',id);load()}return}
   if(a==='new'){S.d={oid:null,tn:'',l:{}};return dm()}
@@ -376,8 +382,10 @@ async function onClick(e){
   if(a==='pl'||a==='mn'){const l=S.d.l[id]||(S.d.l[id]={q:0});l.q=Math.max(0,l.q+(a==='pl'?1:-1));return dm()}
   if(a==='tk'){(S.d.l[id]||(S.d.l[id]={q:0})).t=t.checked;return dm()}
   if(a==='sd')return saveDraft();
-  if(a==='pay'){const ids=itemsOf(id).filter(i=>!i.paid).map(i=>i.id);if(!ids.length)return alert('Este pedido ya está cobrado.');S.p={oid:id,ids,mode:null,n:0,a:[],mt:[],rc:[]};return pm()}
-  if(a==='pmode'){const u=units(S.p.oid);S.p.mode=D.v;if(D.v==='single'){S.p.n=1;S.p.a=u.map(()=>0);S.p.mt=['efectivo']}else{S.p.a=u.map(()=>-1)}return pm()}
+  if(a==='pay'){const ids=itemsOf(id).filter(i=>!i.paid).map(i=>i.id);if(!ids.length)return alert('Este pedido ya está cobrado.');const its=itemsOf(id),tk=its.filter(i=>i.take_away);S.p={oid:id,ids,ask:tk.length>0&&tk.length<its.length&&tk.every(i=>i.delivered)&&tk.some(i=>!i.handed),ok:false,mode:null,n:0,a:[],mt:[],rc:[]};return pm()}
+  if(a==='pmode'){const u=units(S.p.oid);S.p.mode=D.v;if(D.v==='single'){S.p.n=1;S.p.a=u.map(()=>0);S.p.mt=['efectivo']}else{S.p.a=u.map(()=>-1)}
+    if(D.v==='single'&&S.p.ask){if(!confirm(ASKMSG))return closeM();S.p.ok=true}
+    return pm()}
   if(a==='pback'){S.p.mode=null;return pm()}
   if(a==='pn'){const n=Math.min(20,Math.max(2,+$('#np').value||2));S.p.n=n;S.p.mt=Array(n).fill('efectivo');return pm()}
   if(a==='mt'){S.p.mt[+D.k]=D.v;return pm()}
