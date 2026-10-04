@@ -83,6 +83,17 @@ button.pri:hover{background:#7d4a2a}nav button:hover:not(.on){background:var(--f
 [hidden]{display:none!important}
 td.nw{white-space:nowrap}
 @media(max-width:700px){
+.pt,.pt tbody{display:block;width:100%;background:none}
+.pt tr.hd{display:none}
+.pt tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.15rem .7rem;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:.65rem .8rem;margin:0 0 .5rem}
+.pt td{display:block;border:0;padding:0;text-align:left!important}
+.pt td.pn{grid-column:1;grid-row:1;font-weight:600;font-size:1.02rem;overflow-wrap:anywhere}
+.pt td.pp{grid-column:2;grid-row:1;font-weight:700;font-size:1.05rem}
+.pt td.pc{grid-column:1;grid-row:2;color:var(--mut);font-size:.85rem}
+.pt td.pl{grid-column:2;grid-row:2;color:var(--mut);font-size:.85rem}.pt td.pl::before{content:"Para llevar "}
+.pt td.acts{grid-column:1/-1;grid-row:3;display:flex;gap:.5rem;padding-top:.55rem}.pt td.acts button{flex:1;min-height:42px}
+}
+@media(max-width:700px){
 .rt,.rt tbody{display:block;background:none;width:100%}
 .rt tr.hd{display:none}
 .rt tr{display:block;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:.6rem .8rem;margin:0 0 .6rem}
@@ -269,7 +280,7 @@ function view(){
     <h3>Registro de eventos</h3><p style="margin:0 0 .6rem;color:var(--mut)">Todo lo que se hace en el sistema, con el usuario, la fecha y la hora.</p>
     <div class="scroll lim"><table class=rt><tr class=hd><th>Fecha y hora</th><th>Usuario</th><th>Evento</th></tr>${(S.events||[]).map(e=>`<tr><td data-l="Fecha y hora" class=nw>${new Date(e.at).toLocaleDateString('es',{day:'2-digit',month:'short',year:'numeric'})} · ${new Date(e.at).toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</td><td data-l="Usuario">${esc(e.username)}</td><td data-l="Evento">${esc(e.action)}</td></tr>`).join('')||'<tr><td colspan=3>Aún no hay eventos registrados.</td></tr>'}</table></div>
     ${(S.events||[]).length>=(S.evN||200)?'<div class=bar style="margin-top:.8rem"><button data-act=evm>Ver más eventos</button></div>':''}`}
-  if(t==='productos'){const mq=S.prods.filter(p=>!S.pq||norm(p.name+' '+p.category).includes(norm(S.pq.trim()))).length;return `<div class=bar><b>Productos <small id=pc>${S.pq&&S.pq.trim()?`(${mq} de ${S.prods.length})`:`(${S.prods.length})`}</small></b><button class=pri data-act=np>+ Nuevo producto</button></div><div style="margin-bottom:.8rem"><input type=search id=pq placeholder="Buscar producto por nombre o categoría…" autocomplete=off enterkeyhint=search value="${esc(S.pq||'')}" oninput="fp(this.value)"></div><div class=scroll><table id=ptab><tr><th>Nombre</th><th>Categoría</th><th class=n>Precio</th><th class=n>Para llevar</th><th></th></tr>${S.prods.map(p=>`<tr data-n="${esc(norm(p.name+' '+p.category))}" ${!S.pq||norm(p.name+' '+p.category).includes(norm(S.pq.trim()))?'':'hidden'}><td>${esc(p.name)}</td><td>${esc(p.category)}</td><td class=n>${money(p.price)}</td><td class=n>${money(pr(p,1))}</td><td class=n><button data-act=ep data-id=${p.id}>Editar</button> <button class=x data-act=dp data-id=${p.id}>Eliminar</button></td></tr>`).join('')}</table></div><p class=empty id=pnr ${S.pq&&S.pq.trim()&&!mq?'':'hidden'}>Ningún producto coincide.</p>`}
+  if(t==='productos'){const mq=S.prods.filter(p=>!S.pq||norm(p.name+' '+p.category).includes(norm(S.pq.trim()))).length;return `<div class=bar><b>Productos <small id=pc>${S.pq&&S.pq.trim()?`(${mq} de ${S.prods.length})`:`(${S.prods.length})`}</small></b><button class=pri data-act=np>+ Nuevo producto</button></div><div style="margin-bottom:.8rem"><input type=search id=pq placeholder="Buscar producto por nombre o categoría…" autocomplete=off enterkeyhint=search value="${esc(S.pq||'')}" oninput="fp(this.value)"></div><div class=scroll><table id=ptab class=pt><tr class=hd><th>Nombre</th><th>Categoría</th><th class=n>Precio</th><th class=n>Para llevar</th><th></th></tr>${S.prods.map(p=>`<tr data-n="${esc(norm(p.name+' '+p.category))}" ${!S.pq||norm(p.name+' '+p.category).includes(norm(S.pq.trim()))?'':'hidden'}><td class=pn>${esc(p.name)}</td><td class=pc>${esc(p.category)}</td><td class="n pp">${money(p.price)}</td><td class="n pl">${money(pr(p,1))}</td><td class="n acts"><button data-act=ep data-id=${p.id}>Editar</button> <button class=x data-act=dp data-id=${p.id}>Eliminar</button></td></tr>`).join('')}</table></div><p class=empty id=pnr ${S.pq&&S.pq.trim()&&!mq?'':'hidden'}>Ningún producto coincide.</p>`}
 }
 function render(){
   document.body.classList.remove('busy');if(S.u&&S.u.role)applyShield();const y=scrollY,nl=$('nav')?.scrollLeft||0,ae=document.activeElement,aid=ae&&ae.id,ss=ae&&ae.selectionStart,ls=[...document.querySelectorAll('.lim')].map(e=>e.scrollTop);
