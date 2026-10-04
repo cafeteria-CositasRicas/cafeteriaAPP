@@ -238,9 +238,7 @@ function warnLeft(sec){clearInterval(S.wt);
 function wmUpdate(){const d=$('#wm');if(!d||!S.u)return;const t=`${S.u.username} · ${new Date().toLocaleString('es',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}`;
   const svg=`<svg xmlns='http://www.w3.org/2000/svg' width='260' height='170'><text x='20' y='100' transform='rotate(-25 130 85)' font-family='sans-serif' font-size='15' fill='rgba(128,128,128,0.25)'>${esc(t)}</text></svg>`;
   d.style.backgroundImage=`url("data:image/svg+xml,${encodeURIComponent(svg)}")`}
-function applyShield(){const on=PROTEGIDOS.includes(S.u.role);document.body.classList.toggle('shield',on);let w=$('#wm');
-  if(!on){if(w)w.remove();clearInterval(S.wmt);return}
-  if(!w){w=document.createElement('div');w.id='wm';document.body.appendChild(w);clearInterval(S.wmt);S.wmt=setInterval(wmUpdate,60000)}wmUpdate()}
+function applyShield(){const on=PROTEGIDOS.includes(S.u.role);document.body.classList.toggle('shield',on);const w=$('#wm');if(w)w.remove();clearInterval(S.wmt)}
 function cover(on,msg){let c=$('#cover');if(!on){if(c)c.remove();return}
   if(!c){c=document.createElement('div');c.id='cover';document.body.appendChild(c)}c.textContent=msg||'Contenido protegido. Vuelve a esta pantalla para continuar.'}
 function attempt(){cover(true,'Captura de pantalla no permitida.');navigator.clipboard?.writeText(' ').catch(()=>{});
