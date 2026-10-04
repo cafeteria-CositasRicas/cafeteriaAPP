@@ -81,6 +81,10 @@ button.pri:hover{background:#7d4a2a}nav button:hover:not(.on){background:var(--f
 @media(prefers-reduced-motion:reduce){*,::before,::after{animation:none!important;transition:none!important}}
 .pw{position:relative}.pw input{padding-right:3rem}.pw .eye{position:absolute;right:4px;top:3px;height:36px;min-height:0;border:0;background:none;padding:0 .6rem;color:var(--mut)}.pw .eye svg{width:22px;height:22px;display:block}.pw .eye:hover{color:var(--acc)}
 [hidden]{display:none!important}
+#warn{position:fixed;top:0;left:0;right:0;z-index:60;background:var(--pen);color:#fff;font-weight:600;text-align:center;padding:calc(.55rem + env(safe-area-inset-top)) .8rem .55rem;box-shadow:0 4px 14px #0003;animation:drop .35s ease-out}
+#warn.urgent{background:var(--bad);animation:flash 1s ease-in-out infinite}
+body.warn{padding-top:calc(46px + env(safe-area-inset-top))}body.warn nav{top:calc(46px + env(safe-area-inset-top))}
+@keyframes drop{from{transform:translateY(-100%)}}@keyframes flash{50%{background:#8f2f21}}
 .lim{max-height:min(320px,42vh);overflow:auto;border:1px solid var(--line);border-radius:12px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .lim table{border-radius:0}.lim th{position:sticky;top:0;z-index:1;background:var(--foam);box-shadow:0 1px 0 var(--line)}
 .tags{display:flex;gap:.3rem;flex-wrap:wrap;justify-content:flex-end}.tag.cobrado{background:var(--acc)}.tag.parcial{background:#8a5a2b}
@@ -145,19 +149,21 @@ const closeM=()=>{$('#modal').innerHTML='';S.d=S.p=S.sel=null};
 async function load(){
   if(!S.u)return;
   document.body.classList.add('busy');
-  const [o,p,pa,e,us,lg,st]=await Promise.all([
+  const [o,p,pa,e,us,lg,st,ac]=await Promise.all([
     sb.from('orders').select('*,order_items(*)').is('shift_id',null).order('created_at').order('id',{referencedTable:'order_items'}),
     sb.from('products').select('*').order('category').order('name'),
     sb.from('payments').select('*').is('shift_id',null), sb.from('expenses').select('*').is('shift_id',null),
     sb.from('profiles').select('*').order('username'),
     sb.from('sessions_log').select('*').order('started_at',{ascending:false}).limit(60),
-    sb.from('staff').select('*')]);
+    sb.from('staff').select('*'),sb.rpc('access_status')]);
+  if(!ac.error&&ac.data&&ac.data!=='ok')return forceOut(msgFor(ac.data));
   if(fail(o))return;
   if(!us.error){const me=(us.data||[]).find(x=>x.id===S.u.id);if(!me||me.blocked)return forceOut(me?'Tu acceso fue bloqueado por el administrador.':'No se encontró el perfil del usuario.');S.u=me;S.users=us.data;S.logs=lg.data||[]}
   S.orders=o.data.map(({order_items,...x})=>x);S.items=o.data.flatMap(x=>x.order_items||[]);
   S.prods=p.data||[];S.pays=pa.data||[];S.exps=e.data||[];S.staff=Object.fromEntries((st.data||[]).map(x=>[x.id,x]));
   render();
 }
+const msgFor=a=>a==='blocked'?'Tu acceso fue bloqueado por el administrador.':a==='deleted'?'No se encontró el perfil del usuario.':String(a).startsWith('schedule')?`Fuera de horario. Tu acceso al sistema es de ${a.split(' ')[1].replace('-',' a ')}. La jornada se cierra automáticamente al terminar el horario.`:'Acceso no permitido.';
 async function loadUsers(){
   const [us,lg,st,ev]=await Promise.all([sb.from('profiles').select('*').order('username'),sb.from('sessions_log').select('*').order('started_at',{ascending:false}).limit(60),sb.from('staff').select('*'),sb.from('audit_log').select('*').order('at',{ascending:false}).limit(S.evN||200)]);
   if(!us.error&&S.u){S.staff=Object.fromEntries((st.data||[]).map(x=>[x.id,x]));S.users=us.data;S.logs=lg.data||[];S.events=ev.data||[]}
@@ -179,13 +185,24 @@ async function start(){
   S.u={id:session.user.id};S.anim=true;
   await load();if(!S.u)return;
   if(!S.u.role)return forceOut('No se pudo conectar. Intenta de nuevo.');
-  sb.rpc('start_session').then(r=>{S.sid=r.data});
+  sb.rpc('start_session').then(r=>{S.sid=r.data;beat()});
   if(S.ch)sb.removeChannel(S.ch);
   S.ch=sb.channel('cafe').on('postgres_changes',{event:'*',schema:'public'},later).subscribe();
   clearInterval(hb);hb=setInterval(beat,20000);
 }
-async function beat(){if(!S.u)return;const r=await sb.rpc('heartbeat',{sid:S.sid});if(r.data===true)return forceOut('Tu acceso fue bloqueado por el administrador.');if(S.tab==='usuarios')loadUsers()}
-async function forceOut(msg){clearInterval(hb);const sid=S.sid;S.u=null;try{await sb.rpc('end_session',{sid})}catch(e){}await sb.auth.signOut();closeM();login(msg)}
+async function beat(){if(!S.u)return;const r=await sb.rpc('heartbeat',{sid:S.sid});const d=String(r.data||'');if(d&&!d.startsWith('ok'))return forceOut(msgFor(d));
+  warnLeft(d.startsWith('ok:')?+d.slice(3):null);if(S.tab==='usuarios')loadUsers()}
+function setWarn(r){let b=$('#warn');
+  if(r===null){if(b)b.remove();document.body.classList.remove('warn');return}
+  if(!b){b=document.createElement('div');b.id='warn';b.setAttribute('role','alert');document.body.appendChild(b);document.body.classList.add('warn')}
+  b.className=r<=120?'urgent':'';
+  b.textContent=`⏰ Tu acceso termina en ${Math.floor(r/60)}:${String(r%60).padStart(2,'0')}. Guarda y cobra lo que tengas pendiente.`}
+function warnLeft(sec){clearInterval(S.wt);
+  if(sec===null||sec>600)return setWarn(null);
+  S.endAt=Date.now()+sec*1000;
+  const tick=()=>{const r=Math.max(0,Math.round((S.endAt-Date.now())/1000));setWarn(r);if(r<=0){clearInterval(S.wt);beat()}};
+  tick();S.wt=setInterval(tick,1000)}
+async function forceOut(msg){clearInterval(hb);clearInterval(S.wt);setWarn(null);const sid=S.sid;S.u=null;try{await sb.rpc('end_session',{sid})}catch(e){}await sb.auth.signOut();closeM();login(msg)}
 function login(msg=''){
   $('#app').innerHTML=`<div class=login><svg class=cup viewBox="0 0 84 84" aria-hidden=true><g class=steam><path d="M30 24q-5-6 0-12"/><path d="M42 24q-5-6 0-12"/><path d="M54 24q-5-6 0-12"/></g><path d="M16 36h46v18a20 20 0 0 1-20 20h-6a20 20 0 0 1-20-20z" fill="#6b3f23"/><path d="M62 42h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#6b3f23" stroke-width="5"/><ellipse cx="39" cy="36" rx="23" ry="4" fill="#d08a22"/></svg><h1>Cafetería</h1><label>Usuario<input id=lu autocomplete=username autocapitalize=none></label>
   <label>Clave<div class=pw><input id=lp type=password autocomplete=current-password><button type=button class=eye data-act=eye aria-label="Mostrar clave"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></label><div class=err id=le>${msg}</div><button class=pri data-act=in>Ingresar</button></div>`;
@@ -208,7 +225,7 @@ function view(){
     ${S.exps.length?`<h3>Retiros</h3><div class=scroll><table>${S.exps.map(x=>`<tr><td>${esc(x.detail)}<small style="display:block;color:var(--mut)">${esc(uname(x.created_by))} · ${fmt(x.created_at)}</small></td><td class=n>${money(x.amount)}</td>${S.u.role==='admin'?`<td class=n><button data-act=ee data-id=${x.id}>Editar</button> <button class=x data-act=de data-id=${x.id}>Eliminar</button></td>`:''}</tr>`).join('')}</table></div>`:''}`}
   if(t==='historial'){const H=S.h;
     return `<div class=bar><b>Historial de jornadas</b></div>${H.shifts.length?H.shifts.map(sh=>{const op=H.open[sh.id],d=H.d[sh.id],cash=+sh.total_cash,tr=+sh.total_transfer,ex=+sh.total_expenses;
-    return `<section class="card"><button class=hrow data-act=hs data-id=${sh.id}><span>${op?'▾':'▸'}</span><span><b>Jornada #${sh.id}</b><small>${fmtY(sh.closed_at)} · cerrada por ${esc(uname(sh.closed_by))}</small></span><b>${money(cash+tr)}</b></button>
+    return `<section class="card"><button class=hrow data-act=hs data-id=${sh.id}><span>${op?'▾':'▸'}</span><span><b>Jornada #${sh.id}</b><small>${fmtY(sh.closed_at)} · ${sh.auto?'cierre automático por fin de horario':'cerrada por '+esc(uname(sh.closed_by))}</small></span><b>${money(cash+tr)}</b></button>
     ${op?(d?`${sumBox({cash,tr,ex,box:cash-ex})}${d.e.length?`<h4>Retiros de caja</h4><ul>${d.e.map(x=>`<li><span>${esc(x.detail)}<small style="display:block;color:var(--mut)">${esc(uname(x.created_by))}</small></span><b>−${money(x.amount)}</b></li>`).join('')}</ul>`:''}
     <h4>${d.o.length} pedido(s) vendidos</h4>${d.o.map(o=>{const it=o.order_items||[],tot=it.reduce((a,i)=>a+i.qty*i.price,0),pays=d.p.filter(p=>p.order_id===o.id),paid=pays.reduce((a,p)=>a+ +p.amount,0)||tot,oo=H.ord[o.id];
     return `<div class=ord><button class=hrow data-act=ho data-id=${o.id}><span>${oo?'▾':'▸'}</span><span><b>Pedido #${o.id}</b> · ${esc(uname(o.created_by))}<small>${fmtY(o.created_at)}</small></span><b>${money(paid)}</b></button>
