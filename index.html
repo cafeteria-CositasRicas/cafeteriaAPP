@@ -179,9 +179,9 @@ function setM(h,c=''){const m=$('#modal'),o=m.querySelector('.sheet'),st=o?o.scr
 const closeM=()=>{$('#modal').innerHTML='';S.d=S.p=S.sel=null};
 
 // ---------- Datos ----------
-async function load(){
+async function load(q){
   if(!S.u)return;
-  document.body.classList.add('busy');
+  if(!q)document.body.classList.add('busy');
   const [o,p,pa,e,us,lg,st,ac]=await Promise.all([
     sb.from('orders').select('*,order_items(*)').is('shift_id',null).order('created_at').order('id',{referencedTable:'order_items'}),
     sb.from('products').select('*').order('category').order('name'),
@@ -192,6 +192,8 @@ async function load(){
   if(!ac.error&&ac.data&&ac.data!=='ok')return forceOut(msgFor(ac.data));
   if(fail(o))return;
   if(!us.error){const me=(us.data||[]).find(x=>x.id===S.u.id);if(!me||me.blocked)return forceOut(me?'Tu acceso fue bloqueado por el administrador.':'No se encontró el perfil del usuario.');S.u=me;S.users=us.data;S.logs=lg.data||[]}
+  const sig=JSON.stringify([o.data,p.data,pa.data,e.data,st.data,us.data]);
+  if(q&&sig===S.sig)return;S.sig=sig;
   S.orders=o.data.map(({order_items,...x})=>x);S.items=o.data.flatMap(x=>x.order_items||[]);
   S.prods=p.data||[];S.pays=pa.data||[];S.exps=e.data||[];S.staff=Object.fromEntries((st.data||[]).map(x=>[x.id,x]));
   render();
@@ -210,7 +212,7 @@ async function loadShift(id){const [o,pa,ex]=await Promise.all([sb.from('orders'
 let tm,tu;
 const later=p=>{
   if(p&&(p.table==='sessions_log'||p.table==='audit_log')){if(S.tab==='usuarios'){clearTimeout(tu);tu=setTimeout(loadUsers,300)}return}
-  clearTimeout(tm);tm=setTimeout(load,250)};
+  clearTimeout(tm);tm=setTimeout(()=>load(true),250)};
 async function start(){
   if(!S.u&&!$('.login'))$('#app').innerHTML='<div class=splash><span class="sp big"></span>Cargando…</div>';
   const {data:{session}}=await sb.auth.getSession();
@@ -219,10 +221,17 @@ async function start(){
   await load();if(!S.u)return;
   if(!S.u.role)return forceOut('No se pudo conectar. Intenta de nuevo.');
   sb.rpc('start_session').then(r=>{S.sid=r.data;beat()});
-  if(S.ch)sb.removeChannel(S.ch);
-  S.ch=sb.channel('cafe').on('postgres_changes',{event:'*',schema:'public'},later).subscribe();
+  connectRT();
   clearInterval(hb);hb=setInterval(beat,20000);
+  clearInterval(S.poll);S.poll=setInterval(()=>{if(S.u&&!document.hidden)load(true)},6000);
 }
+function connectRT(){if(!S.u)return;clearTimeout(S.rtt);
+  if(S.ch){const old=S.ch;S.ch=null;sb.removeChannel(old)}
+  const ch=sb.channel('cafe-'+Date.now());S.ch=ch;S.rtOk=false;
+  ch.on('postgres_changes',{event:'*',schema:'public'},later).subscribe(st=>{if(ch!==S.ch)return;
+    if(st==='SUBSCRIBED')S.rtOk=true;
+    else if(['CHANNEL_ERROR','TIMED_OUT','CLOSED'].includes(st)){S.rtOk=false;clearTimeout(S.rtt);S.rtt=setTimeout(connectRT,3000)}})}
+const resync=()=>{if(!S.u||document.hidden)return;load(true);if(S.sid)beat();if(!S.rtOk)connectRT()};
 async function beat(){if(!S.u)return;const r=await sb.rpc('heartbeat',{sid:S.sid});const d=String(r.data||'');if(d&&!d.startsWith('ok'))return forceOut(msgFor(d));
   warnLeft(d.startsWith('ok:')?+d.slice(3):null);if(S.tab==='usuarios')loadUsers()}
 function setWarn(r){let b=$('#warn');
@@ -244,7 +253,7 @@ function cover(on,msg){let c=$('#cover');if(!on){if(c)c.remove();return}
 function attempt(){cover(true,'Captura de pantalla no permitida.');navigator.clipboard?.writeText(' ').catch(()=>{});
   if(Date.now()-(S.la||0)>30000){S.la=Date.now();sb.rpc('log_attempt')}
   setTimeout(()=>{if(document.hasFocus())cover(false)},2500)}
-async function forceOut(msg){document.body.classList.remove('shield');if($('#wm'))$('#wm').remove();cover(false);clearInterval(S.wmt);clearInterval(hb);clearInterval(S.wt);setWarn(null);const sid=S.sid;S.u=null;try{await sb.rpc('end_session',{sid})}catch(e){}await sb.auth.signOut();closeM();login(msg)}
+async function forceOut(msg){document.body.classList.remove('shield');if($('#wm'))$('#wm').remove();cover(false);clearInterval(S.wmt);clearInterval(hb);clearInterval(S.poll);clearTimeout(S.rtt);if(S.ch){const old=S.ch;S.ch=null;sb.removeChannel(old)}clearInterval(S.wt);setWarn(null);const sid=S.sid;S.u=null;try{await sb.rpc('end_session',{sid})}catch(e){}await sb.auth.signOut();closeM();login(msg)}
 function login(msg=''){
   $('#app').innerHTML=`<div class=login><svg class=cup viewBox="0 0 84 84" aria-hidden=true><g class=steam><path d="M30 24q-5-6 0-12"/><path d="M42 24q-5-6 0-12"/><path d="M54 24q-5-6 0-12"/></g><path d="M16 36h46v18a20 20 0 0 1-20 20h-6a20 20 0 0 1-20-20z" fill="#6b3f23"/><path d="M62 42h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#6b3f23" stroke-width="5"/><ellipse cx="39" cy="36" rx="23" ry="4" fill="#d08a22"/></svg><h1>Cafetería</h1><label>Usuario<input id=lu autocomplete=username autocapitalize=none></label>
   <label>Clave<div class=pw><input id=lp type=password autocomplete=current-password><button type=button class=eye data-act=eye aria-label="Mostrar clave"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></label><div class=err id=le>${msg}</div><button class=pri data-act=in>Ingresar</button></div>`;
@@ -283,12 +292,28 @@ function view(){
     ${(S.events||[]).length>=(S.evN||200)?'<div class=bar style="margin-top:.8rem"><button data-act=evm>Ver más eventos</button></div>':''}`}
   if(t==='productos'){const mq=S.prods.filter(p=>!S.pq||norm(p.name+' '+p.category).includes(norm(S.pq.trim()))).length;return `<div class=bar><b>Productos <small id=pc>${S.pq&&S.pq.trim()?`(${mq} de ${S.prods.length})`:`(${S.prods.length})`}</small></b><button class=pri data-act=np>+ Nuevo producto</button></div><div style="margin-bottom:.8rem"><input type=search id=pq placeholder="Buscar producto por nombre o categoría…" autocomplete=off enterkeyhint=search value="${esc(S.pq||'')}" oninput="fp(this.value)"></div><div class=scroll><table id=ptab class=pt><tr class=hd><th>Nombre</th><th>Categoría</th><th class=n>Precio</th><th class=n>Para llevar</th><th></th></tr>${S.prods.map(p=>`<tr data-n="${esc(norm(p.name+' '+p.category))}" ${!S.pq||norm(p.name+' '+p.category).includes(norm(S.pq.trim()))?'':'hidden'}><td class=pn>${esc(p.name)}</td><td class=pc>${esc(p.category)}</td><td class="n pp">${money(p.price)}</td><td class="n pl">${money(pr(p,1))}</td><td class="n acts"><button data-act=ep data-id=${p.id}>Editar</button> <button class=x data-act=dp data-id=${p.id}>Eliminar</button></td></tr>`).join('')}</table></div><p class=empty id=pnr ${S.pq&&S.pq.trim()&&!mq?'':'hidden'}>Ningún producto coincide.</p>`}
 }
+// Actualiza solo lo que cambió (sin redibujar toda la pantalla)
+function syncAttrs(x,y){if(x.tagName==='MAIN')return;
+  [...x.attributes].forEach(({name})=>{if(!y.hasAttribute(name)&&!(name==='style'&&(x.getAttribute('style')||'').includes('--i')))x.removeAttribute(name)});
+  [...y.attributes].forEach(({name,value})=>{if(x.getAttribute(name)!==value)x.setAttribute(name,value)});
+  if(x.tagName==='INPUT'){if(x.type==='checkbox'||x.type==='radio'){if(x.checked!==y.checked)x.checked=y.checked}else if(x!==document.activeElement&&x.value!==y.value)x.value=y.value}}
+function morph(a,b){const ac=[...a.childNodes],bc=[...b.childNodes],n=Math.max(ac.length,bc.length);
+  for(let i=0;i<n;i++){const x=ac[i],y=bc[i];
+    if(!y){x.remove();continue}
+    if(!x){a.appendChild(y);continue}
+    if(x.nodeType!==y.nodeType||x.nodeName!==y.nodeName){a.replaceChild(y,x);continue}
+    if(x.nodeType!==1){if(x.nodeValue!==y.nodeValue)x.nodeValue=y.nodeValue;continue}
+    syncAttrs(x,y);morph(x,y)}}
+function patch(html){const app=$('#app');
+  if(S.anim||!app.querySelector('main')||!app.querySelector('nav')){app.innerHTML=html;return}
+  const t=document.createElement('div');t.innerHTML=html;morph(app,t)}
 function render(){
   document.body.classList.remove('busy');if(S.u&&S.u.role)applyShield();const y=scrollY,nl=$('nav')?.scrollLeft||0,ae=document.activeElement,aid=ae&&ae.id,ss=ae&&ae.selectionStart,ls=[...document.querySelectorAll('.lim')].map(e=>e.scrollTop);
   if(!S.u)return;
   const tabs=[...(PERMS[S.u.role]||PERMS.mesero),'perfil']; if(!tabs.includes(S.tab))S.tab=tabs[0];
-  $('#app').innerHTML=`<header class=top><h1>Cafetería</h1><span><small>${esc(S.u.username)} · ${esc(S.u.role)}</small> <button class=out data-act=out aria-label="Cerrar sesión"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>Cerrar sesión</button></span></header>
+  const html=`<header class=top><h1>Cafetería</h1><span><small>${esc(S.u.username)} · ${esc(S.u.role)}</small> <button class=out data-act=out aria-label="Cerrar sesión"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>Cerrar sesión</button></span></header>
   <nav>${tabs.map(t=>`<button class="${t===S.tab?'on':''}" data-act=tab data-t=${t}>${TABS[t]}</button>`).join('')}</nav><main class="${S.anim?'in':''}">${view()}</main>`;
+  patch(html);
   scrollTo(0,S.anim?0:y);if($('nav'))$('nav').scrollLeft=nl;S.anim=false;
   document.querySelectorAll('.lim').forEach((e,i)=>{e.scrollTop=ls[i]||0});
   if(aid){const el=document.getElementById(aid);if(el&&el!==document.activeElement){el.focus({preventScroll:true});try{el.setSelectionRange(ss,ss)}catch(e){}}}
@@ -465,5 +490,7 @@ document.addEventListener('keydown',e=>{if(!shield())return;
 document.addEventListener('keyup',e=>{if(shield()&&e.key==='PrintScreen')attempt()});
 document.addEventListener('contextmenu',e=>{if(shield()&&!e.target.closest('input,textarea'))e.preventDefault()});
 addEventListener('beforeprint',()=>{if(shield())attempt()});
+// Actualización automática: al volver a la pestaña, recuperar internet o reabrir la página
+document.addEventListener('visibilitychange',resync);addEventListener('focus',resync);addEventListener('online',resync);addEventListener('pageshow',resync);
 start();
 </script></body></html>
