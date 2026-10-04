@@ -278,7 +278,7 @@ const cashInfo=id=>{const all=S.pays.filter(p=>p.order_id===id),split=all.length
   if(!c.length)return '';
   const row=(k,v,cl='')=>`<div class="pdr ${cl}"><span>${k}</span><b>${v}</b></div>`;
   return `<details class=pd><summary>Detalles del pago</summary><div class=pdb>${c.map(p=>{const ef=p.method==='efectivo';
-    return `<div class=pdp>${split?`<div class=pdh><b>Persona ${p.person}</b><span class="tag ${ef?'cobrado':'listo'}">${ef?'Efectivo':'Transferencia'}</span></div>`:''}${row('Total cobrado',money(p.amount))}${ef?row('Recibido',money(p.received??p.amount))+row('Cambio',money(p.change_given??0),'chv'):''}</div>`}).join('')}</div></details>`};
+    return `<div class=pdp>${split?`<div class=pdh><b>Persona ${p.person}</b><span class="tag ${ef?'cobrado':'listo'}">${ef?'Efectivo':'Transferencia'}</span></div>`:''}${ef?row('Recibido',money(p.received??p.amount))+row('Cambio',money(p.change_given??0),'chv'):''}</div>`}).join('')}</div></details>`};
 const cajaTot=()=>{const f=m=>S.pays.filter(p=>p.method===m).reduce((a,p)=>a+ +p.amount,0),ex=S.exps.reduce((a,x)=>a+ +x.amount,0);return{cash:f('efectivo'),tr:f('transferencia'),ex,box:f('efectivo')-ex}};
 const sumBox=t=>`<table><tr><td>Pagos en efectivo</td><td class=n>${money(t.cash)}</td></tr><tr><td>Pagos por transferencia</td><td class=n>${money(t.tr)}</td></tr><tr><td>Retiros de caja (compras)</td><td class=n>−${money(t.ex)}</td></tr><tr><th>Efectivo que debe haber en caja</th><th class=n>${money(t.box)}</th></tr><tr><th>Total vendido</th><th class=n>${money(t.cash+t.tr)}</th></tr></table>`;
 function view(){
