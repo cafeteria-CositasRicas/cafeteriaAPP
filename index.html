@@ -81,6 +81,24 @@ button.pri:hover{background:#7d4a2a}nav button:hover:not(.on){background:var(--f
 @media(prefers-reduced-motion:reduce){*,::before,::after{animation:none!important;transition:none!important}}
 .pw{position:relative}.pw input{padding-right:3rem}.pw .eye{position:absolute;right:4px;top:3px;height:36px;min-height:0;border:0;background:none;padding:0 .6rem;color:var(--mut)}.pw .eye svg{width:22px;height:22px;display:block}.pw .eye:hover{color:var(--acc)}
 [hidden]{display:none!important}
+td.nw{white-space:nowrap}
+@media(max-width:700px){
+.rt,.rt tbody{display:block;background:none;width:100%}
+.rt tr.hd{display:none}
+.rt tr{display:block;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:.6rem .8rem;margin:0 0 .6rem}
+.lim .rt tr{margin:.5rem;width:auto}.lim{max-height:min(440px,58vh)}
+.rt td{display:grid;grid-template-columns:7rem minmax(0,1fr);gap:.5rem;align-items:center;border:0;padding:.22rem 0;text-align:left!important;white-space:normal;overflow-wrap:anywhere}
+.rt td::before{content:attr(data-l);color:var(--mut);font-size:.82rem}
+.rt td.first{display:block;font-size:1.08rem;font-weight:600;padding-bottom:.35rem;margin-bottom:.15rem;border-bottom:1px solid var(--line)}.rt td.first::before{content:none}
+.rt td.acts{display:flex;flex-wrap:wrap;gap:.4rem;padding-top:.6rem}.rt td.acts::before{content:none}
+.rt td.acts button{flex:1 1 28%;min-height:42px}
+.rt td[colspan]{display:block;color:var(--mut)}.rt td[colspan]::before{content:none}
+}
+#wm{position:fixed;inset:0;z-index:70;pointer-events:none;background-repeat:repeat}
+#cover{position:fixed;inset:0;z-index:80;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;text-align:center;padding:2rem;font-size:1.2rem;font-weight:600}
+body.shield{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+body.shield input,body.shield textarea{-webkit-user-select:text;user-select:text}
+@media print{body.shield *{display:none!important}body.shield::after{content:'Impresión no permitida';display:block;padding:2rem;font-size:1.5rem}}
 #warn{position:fixed;top:0;left:0;right:0;z-index:60;background:var(--pen);color:#fff;font-weight:600;text-align:center;padding:calc(.55rem + env(safe-area-inset-top)) .8rem .55rem;box-shadow:0 4px 14px #0003;animation:drop .35s ease-out}
 #warn.urgent{background:var(--bad);animation:flash 1s ease-in-out infinite}
 body.warn{padding-top:calc(46px + env(safe-area-inset-top))}body.warn nav{top:calc(46px + env(safe-area-inset-top))}
@@ -120,6 +138,7 @@ const SUPABASE_URL='https://egkspfelnrsumpzfdlbs.supabase.co', SUPABASE_KEY='eyJ
 const DOM='@cafeteria.app'; // los usuarios se crean como usuario@cafeteria.app
 // ===== Niveles: para agregar uno nuevo, añade una línea con las pestañas que puede ver =====
 const PERMS={admin:['pedidos','resumen','pagados','caja','historial','productos','usuarios'],mesero:['pedidos','resumen','pagados','caja']};
+const PROTEGIDOS=['mesero']; // niveles con protección anti-captura
 const TABS={pedidos:'En cola',resumen:'Por servir',pagados:'Pagados',caja:'Caja',productos:'Productos',usuarios:'Usuarios',historial:'Historial',perfil:'Mi perfil'};
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const sb2=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:'tmp-admin'}});
@@ -202,7 +221,18 @@ function warnLeft(sec){clearInterval(S.wt);
   S.endAt=Date.now()+sec*1000;
   const tick=()=>{const r=Math.max(0,Math.round((S.endAt-Date.now())/1000));setWarn(r);if(r<=0){clearInterval(S.wt);beat()}};
   tick();S.wt=setInterval(tick,1000)}
-async function forceOut(msg){clearInterval(hb);clearInterval(S.wt);setWarn(null);const sid=S.sid;S.u=null;try{await sb.rpc('end_session',{sid})}catch(e){}await sb.auth.signOut();closeM();login(msg)}
+function wmUpdate(){const d=$('#wm');if(!d||!S.u)return;const t=`${S.u.username} · ${new Date().toLocaleString('es',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}`;
+  const svg=`<svg xmlns='http://www.w3.org/2000/svg' width='260' height='170'><text x='20' y='100' transform='rotate(-25 130 85)' font-family='sans-serif' font-size='15' fill='rgba(128,128,128,0.25)'>${esc(t)}</text></svg>`;
+  d.style.backgroundImage=`url("data:image/svg+xml,${encodeURIComponent(svg)}")`}
+function applyShield(){const on=PROTEGIDOS.includes(S.u.role);document.body.classList.toggle('shield',on);let w=$('#wm');
+  if(!on){if(w)w.remove();clearInterval(S.wmt);return}
+  if(!w){w=document.createElement('div');w.id='wm';document.body.appendChild(w);clearInterval(S.wmt);S.wmt=setInterval(wmUpdate,60000)}wmUpdate()}
+function cover(on,msg){let c=$('#cover');if(!on){if(c)c.remove();return}
+  if(!c){c=document.createElement('div');c.id='cover';document.body.appendChild(c)}c.textContent=msg||'Contenido protegido. Vuelve a esta pantalla para continuar.'}
+function attempt(){cover(true,'Captura de pantalla no permitida.');navigator.clipboard?.writeText(' ').catch(()=>{});
+  if(Date.now()-(S.la||0)>30000){S.la=Date.now();sb.rpc('log_attempt')}
+  setTimeout(()=>{if(document.hasFocus())cover(false)},2500)}
+async function forceOut(msg){document.body.classList.remove('shield');if($('#wm'))$('#wm').remove();cover(false);clearInterval(S.wmt);clearInterval(hb);clearInterval(S.wt);setWarn(null);const sid=S.sid;S.u=null;try{await sb.rpc('end_session',{sid})}catch(e){}await sb.auth.signOut();closeM();login(msg)}
 function login(msg=''){
   $('#app').innerHTML=`<div class=login><svg class=cup viewBox="0 0 84 84" aria-hidden=true><g class=steam><path d="M30 24q-5-6 0-12"/><path d="M42 24q-5-6 0-12"/><path d="M54 24q-5-6 0-12"/></g><path d="M16 36h46v18a20 20 0 0 1-20 20h-6a20 20 0 0 1-20-20z" fill="#6b3f23"/><path d="M62 42h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#6b3f23" stroke-width="5"/><ellipse cx="39" cy="36" rx="23" ry="4" fill="#d08a22"/></svg><h1>Cafetería</h1><label>Usuario<input id=lu autocomplete=username autocapitalize=none></label>
   <label>Clave<div class=pw><input id=lp type=password autocomplete=current-password><button type=button class=eye data-act=eye aria-label="Mostrar clave"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></label><div class=err id=le>${msg}</div><button class=pri data-act=in>Ingresar</button></div>`;
@@ -233,16 +263,16 @@ function view(){
   if(t==='perfil'){const u=S.u,f=S.staff[u.id]||{},row=(k,v)=>`<tr><th>${k}</th><td>${esc(v||'—')}</td></tr>`;
     return `<div class=bar><b>Mi perfil</b><button class=pri data-act=pf data-uid=${u.id}>Editar mis datos</button></div>${f.full_name?'':'<p>Completa tus datos con “Editar mis datos”.</p>'}<div class=scroll><table>${row('Usuario',u.username)}${row('Nivel',u.role)}${row('Nombre completo',f.full_name)}${row('Cédula',f.id_number)}${row('Teléfono',f.phone)}${row('Correo de contacto',f.contact_email)}${row('Dirección',f.address)}</table></div>`}
   if(t==='usuarios'){const now=Date.now(),on=l=>l&&!l.ended_at&&now-new Date(l.last_seen)<75000,d=l=>!l?'—':dur((on(l)?now:new Date(l.ended_at||l.last_seen))-new Date(l.started_at));
-    return `<div class=bar><b>Usuarios</b><button class=pri data-act=nu>+ Nuevo usuario</button></div><div class=scroll><table><tr><th>Usuario</th><th>Nivel</th><th>Estado</th><th>Último ingreso</th><th>Tiempo conectado</th><th></th></tr>${S.users.map(u=>{const l=S.logs.find(x=>x.user_id===u.id),st=u.blocked?['Bloqueado','blocked']:on(l)?['En línea','online']:['Desconectado','offline'];
-    return `<tr><td>${esc(u.username)}<small style="display:block;color:var(--mut)">${esc(S.staff[u.id]?.full_name||'')}</small></td><td>${esc(u.role)}</td><td><span class="tag ${st[1]}">${st[0]}</span></td><td>${fmt(l?.started_at)}</td><td>${d(l)}</td><td class=n><button data-act=pf data-uid=${u.id}>Perfil</button> ${u.id===S.u.id?'<small>(tú)</small>':`<button class="${u.blocked?'pri':''}" data-act=ub data-uid=${u.id}>${u.blocked?'Habilitar':'Bloquear'}</button> <button class=x data-act=ud data-uid=${u.id}>Eliminar</button>`}</td></tr>`}).join('')}</table></div>
-    <h3>Historial de conexiones</h3><div class="scroll lim"><table><tr><th>Usuario</th><th>Ingreso</th><th>Salida</th><th>Duración</th></tr>${S.logs.map(l=>`<tr><td>${esc(l.username)}</td><td>${fmt(l.started_at)}</td><td>${on(l)?'En línea':fmt(l.ended_at||l.last_seen)}</td><td>${d(l)}</td></tr>`).join('')||'<tr><td colspan=4>Sin registros</td></tr>'}</table></div>
+    return `<div class=bar><b>Usuarios</b><button class=pri data-act=nu>+ Nuevo usuario</button></div><div class=scroll><table class=rt><tr class=hd><th>Usuario</th><th>Nivel</th><th>Estado</th><th>Último ingreso</th><th>Tiempo conectado</th><th></th></tr>${S.users.map(u=>{const l=S.logs.find(x=>x.user_id===u.id),st=u.blocked?['Bloqueado','blocked']:on(l)?['En línea','online']:['Desconectado','offline'];
+    return `<tr><td class=first>${esc(u.username)}<small style="display:block;color:var(--mut);font-weight:400;font-size:.85rem">${esc(S.staff[u.id]?.full_name||'')}</small></td><td data-l="Nivel">${esc(u.role)}</td><td data-l="Estado"><span class="tag ${st[1]}">${st[0]}</span></td><td data-l="Último ingreso">${fmt(l?.started_at)}</td><td data-l="Tiempo conectado">${d(l)}</td><td class="n acts"><button data-act=pf data-uid=${u.id}>Perfil</button> ${u.id===S.u.id?'<small>(tú)</small>':`<button class="${u.blocked?'pri':''}" data-act=ub data-uid=${u.id}>${u.blocked?'Habilitar':'Bloquear'}</button> <button class=x data-act=ud data-uid=${u.id}>Eliminar</button>`}</td></tr>`}).join('')}</table></div>
+    <h3>Historial de conexiones</h3><div class="scroll lim"><table class=rt><tr class=hd><th>Usuario</th><th>Ingreso</th><th>Salida</th><th>Duración</th></tr>${S.logs.map(l=>`<tr><td class=first>${esc(l.username)}</td><td data-l="Ingreso">${fmt(l.started_at)}</td><td data-l="Salida">${on(l)?'En línea':fmt(l.ended_at||l.last_seen)}</td><td data-l="Duración">${d(l)}</td></tr>`).join('')||'<tr><td colspan=4>Sin registros</td></tr>'}</table></div>
     <h3>Registro de eventos</h3><p style="margin:0 0 .6rem;color:var(--mut)">Todo lo que se hace en el sistema, con el usuario, la fecha y la hora.</p>
-    <div class="scroll lim"><table><tr><th>Fecha</th><th>Hora</th><th>Usuario</th><th>Evento</th></tr>${(S.events||[]).map(e=>`<tr><td>${new Date(e.at).toLocaleDateString('es',{day:'2-digit',month:'short',year:'numeric'})}</td><td>${new Date(e.at).toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</td><td>${esc(e.username)}</td><td>${esc(e.action)}</td></tr>`).join('')||'<tr><td colspan=4>Aún no hay eventos registrados.</td></tr>'}</table></div>
+    <div class="scroll lim"><table class=rt><tr class=hd><th>Fecha y hora</th><th>Usuario</th><th>Evento</th></tr>${(S.events||[]).map(e=>`<tr><td data-l="Fecha y hora" class=nw>${new Date(e.at).toLocaleDateString('es',{day:'2-digit',month:'short',year:'numeric'})} · ${new Date(e.at).toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</td><td data-l="Usuario">${esc(e.username)}</td><td data-l="Evento">${esc(e.action)}</td></tr>`).join('')||'<tr><td colspan=3>Aún no hay eventos registrados.</td></tr>'}</table></div>
     ${(S.events||[]).length>=(S.evN||200)?'<div class=bar style="margin-top:.8rem"><button data-act=evm>Ver más eventos</button></div>':''}`}
   if(t==='productos'){const mq=S.prods.filter(p=>!S.pq||norm(p.name+' '+p.category).includes(norm(S.pq.trim()))).length;return `<div class=bar><b>Productos <small id=pc>${S.pq&&S.pq.trim()?`(${mq} de ${S.prods.length})`:`(${S.prods.length})`}</small></b><button class=pri data-act=np>+ Nuevo producto</button></div><div style="margin-bottom:.8rem"><input type=search id=pq placeholder="Buscar producto por nombre o categoría…" autocomplete=off enterkeyhint=search value="${esc(S.pq||'')}" oninput="fp(this.value)"></div><div class=scroll><table id=ptab><tr><th>Nombre</th><th>Categoría</th><th class=n>Precio</th><th class=n>Para llevar</th><th></th></tr>${S.prods.map(p=>`<tr data-n="${esc(norm(p.name+' '+p.category))}" ${!S.pq||norm(p.name+' '+p.category).includes(norm(S.pq.trim()))?'':'hidden'}><td>${esc(p.name)}</td><td>${esc(p.category)}</td><td class=n>${money(p.price)}</td><td class=n>${money(pr(p,1))}</td><td class=n><button data-act=ep data-id=${p.id}>Editar</button> <button class=x data-act=dp data-id=${p.id}>Eliminar</button></td></tr>`).join('')}</table></div><p class=empty id=pnr ${S.pq&&S.pq.trim()&&!mq?'':'hidden'}>Ningún producto coincide.</p>`}
 }
 function render(){
-  document.body.classList.remove('busy');const y=scrollY,nl=$('nav')?.scrollLeft||0,ae=document.activeElement,aid=ae&&ae.id,ss=ae&&ae.selectionStart,ls=[...document.querySelectorAll('.lim')].map(e=>e.scrollTop);
+  document.body.classList.remove('busy');if(S.u&&S.u.role)applyShield();const y=scrollY,nl=$('nav')?.scrollLeft||0,ae=document.activeElement,aid=ae&&ae.id,ss=ae&&ae.selectionStart,ls=[...document.querySelectorAll('.lim')].map(e=>e.scrollTop);
   if(!S.u)return;
   const tabs=[...(PERMS[S.u.role]||PERMS.mesero),'perfil']; if(!tabs.includes(S.tab))S.tab=tabs[0];
   $('#app').innerHTML=`<header class=top><h1>Cafetería</h1><span><small>${esc(S.u.username)} · ${esc(S.u.role)}</small> <button class=out data-act=out aria-label="Cerrar sesión"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>Cerrar sesión</button></span></header>
@@ -405,5 +435,16 @@ document.addEventListener('touchend',e=>{if(!T)return;
   tEnd()},{passive:false});
 document.addEventListener('touchcancel',tEnd);
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!S.u&&e.target.id==='lp')document.querySelector('[data-act=in]').click()});
+// Protección anti-captura (disuasiva): no puede bloquear capturas del sistema operativo ni fotos con otra cámara
+const shield=()=>document.body.classList.contains('shield');
+addEventListener('blur',()=>{if(shield())cover(true)});
+addEventListener('focus',()=>cover(false));
+document.addEventListener('visibilitychange',()=>{if(shield())cover(document.hidden)});
+document.addEventListener('keydown',e=>{if(!shield())return;
+  const hit=e.key==='PrintScreen'||(e.metaKey&&e.shiftKey&&['KeyS','Digit3','Digit4','Digit5'].includes(e.code))||((e.ctrlKey||e.metaKey)&&['KeyP','KeyS'].includes(e.code));
+  if(hit){e.preventDefault();attempt()}});
+document.addEventListener('keyup',e=>{if(shield()&&e.key==='PrintScreen')attempt()});
+document.addEventListener('contextmenu',e=>{if(shield()&&!e.target.closest('input,textarea'))e.preventDefault()});
+addEventListener('beforeprint',()=>{if(shield())attempt()});
 start();
 </script></body></html>
