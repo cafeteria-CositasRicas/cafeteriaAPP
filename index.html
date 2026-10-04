@@ -48,7 +48,16 @@ table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;ove
 /* Cerrar sesión */
 button.out{display:inline-flex;align-items:center;gap:.4rem;background:var(--bad);border-color:#d2604d;color:#fff;font-weight:600}
 button.out:hover{background:#c94c39}button.out svg{width:18px;height:18px}
-.cash{margin-top:auto;border-top:1px solid var(--line);padding-top:.5rem;font-size:.92rem;color:var(--mut);display:flex;flex-direction:column;gap:.15rem}.cash b{color:var(--ink)}.cash+footer{margin-top:0}
+.pd{margin-top:auto;border:1px solid var(--line);border-radius:10px;background:var(--foam);overflow:hidden}.pd+footer{margin-top:0}
+.pd summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:.5rem .8rem;min-height:44px;font-weight:600;color:var(--acc);user-select:none}
+.pd summary::-webkit-details-marker{display:none}
+.pd summary::after{content:"";width:8px;height:8px;margin-right:.2rem;border-right:2px solid var(--acc);border-bottom:2px solid var(--acc);transform:rotate(45deg) translateY(-2px);transition:transform .2s}
+.pd[open] summary::after{transform:rotate(-135deg) translateY(-2px)}
+.pd summary:hover{background:#f1e5d3}.pd summary:focus-visible{outline:3px solid #d9a066;outline-offset:-3px}
+.pdb{display:flex;flex-direction:column;gap:.5rem;padding:.5rem .8rem .7rem;background:#fff;border-top:1px solid var(--line)}
+.pdp+.pdp{border-top:1px dashed var(--line);padding-top:.5rem}
+.pdh{display:flex;justify-content:space-between;align-items:center;margin-bottom:.2rem}
+.pdr{display:flex;justify-content:space-between;gap:1rem;padding:.12rem 0;font-size:.93rem;color:var(--mut)}.pdr b{color:var(--ink)}.pdr.chv b{color:var(--ok)}
 button.dan{background:var(--bad);border-color:#9a3526;color:#fffaf3;font-weight:600}
 button.dan:hover{background:#c94c39}
 header.top>span{display:flex;align-items:center;gap:.7rem}
@@ -266,7 +275,10 @@ function card(o){const it=itemsOf(o.id),st=status(o);
   ${it.map(i=>`<li class="${i.delivered?'done':''}"><label><input type=checkbox data-act=tg data-id=${i.id} ${i.delivered?'checked':''}> <span>${esc(i.name)} <em>${i.take_away?'para llevar':'para servir'}${i.paid?' · cobrado':''}</em></span></label><div class=qt><button data-act=iq data-id=${i.id} data-d=-1 ${i.qty<2?'disabled':''} aria-label="Menos">−</button><b>${i.qty}</b><button data-act=iq data-id=${i.id} data-d=1 aria-label="Más">+</button></div><button class=x data-act=di data-id=${i.id} aria-label="Quitar">✕</button><div class=sub>${i.qty} × ${money(i.price)} = <b>${money(i.qty*i.price)}</b></div></li>`).join('')}</ul>
   <footer><b>${money(total(o.id))}</b>${st==='listo'&&isPaid(o)?`<button class=hnd data-act=hand data-id=${o.id}>Entregar</button>`:''}<button data-act=add data-id=${o.id}>Agregar</button>${isPaid(o)?'':`<button class=pri data-act=pay data-id=${o.id}>${paidAmt(o.id)>0?'Cobrar saldo':'Pagar'}</button>`}<button class=x data-act=do data-id=${o.id}>Eliminar</button></footer></article>`}
 const cashInfo=id=>{const all=S.pays.filter(p=>p.order_id===id),split=all.length>1,c=split?all:all.filter(p=>p.method==='efectivo');
-  return c.length?`<div class=cash>${c.map(p=>`<div>${split?'Persona '+p.person+' · ':''}${p.method==='efectivo'?`Pagó <b>${money(p.received??p.amount)}</b> · Cambio <b>${money(p.change_given??0)}</b>`:`Transferencia <b>${money(p.amount)}</b>`}</div>`).join('')}</div>`:''};
+  if(!c.length)return '';
+  const row=(k,v,cl='')=>`<div class="pdr ${cl}"><span>${k}</span><b>${v}</b></div>`;
+  return `<details class=pd><summary>Detalles del pago</summary><div class=pdb>${c.map(p=>{const ef=p.method==='efectivo';
+    return `<div class=pdp>${split?`<div class=pdh><b>Persona ${p.person}</b><span class="tag ${ef?'cobrado':'listo'}">${ef?'Efectivo':'Transferencia'}</span></div>`:''}${row('Total cobrado',money(p.amount))}${ef?row('Recibido',money(p.received??p.amount))+row('Cambio',money(p.change_given??0),'chv'):''}</div>`}).join('')}</div></details>`};
 const cajaTot=()=>{const f=m=>S.pays.filter(p=>p.method===m).reduce((a,p)=>a+ +p.amount,0),ex=S.exps.reduce((a,x)=>a+ +x.amount,0);return{cash:f('efectivo'),tr:f('transferencia'),ex,box:f('efectivo')-ex}};
 const sumBox=t=>`<table><tr><td>Pagos en efectivo</td><td class=n>${money(t.cash)}</td></tr><tr><td>Pagos por transferencia</td><td class=n>${money(t.tr)}</td></tr><tr><td>Retiros de caja (compras)</td><td class=n>−${money(t.ex)}</td></tr><tr><th>Efectivo que debe haber en caja</th><th class=n>${money(t.box)}</th></tr><tr><th>Total vendido</th><th class=n>${money(t.cash+t.tr)}</th></tr></table>`;
 function view(){
@@ -297,7 +309,7 @@ function view(){
 }
 // Actualiza solo lo que cambió (sin redibujar toda la pantalla)
 function syncAttrs(x,y){if(x.tagName==='MAIN')return;
-  [...x.attributes].forEach(({name})=>{if(!y.hasAttribute(name)&&!(name==='style'&&(x.getAttribute('style')||'').includes('--i')))x.removeAttribute(name)});
+  [...x.attributes].forEach(({name})=>{if(!y.hasAttribute(name)&&!(name==='style'&&(x.getAttribute('style')||'').includes('--i'))&&!(name==='open'&&x.tagName==='DETAILS'))x.removeAttribute(name)});
   [...y.attributes].forEach(({name,value})=>{if(x.getAttribute(name)!==value)x.setAttribute(name,value)});
   if(x.tagName==='INPUT'){if(x.type==='checkbox'||x.type==='radio'){if(x.checked!==y.checked)x.checked=y.checked}else if(x!==document.activeElement&&x.value!==y.value)x.value=y.value}}
 function morph(a,b){const ac=[...a.childNodes],bc=[...b.childNodes],n=Math.max(ac.length,bc.length);
