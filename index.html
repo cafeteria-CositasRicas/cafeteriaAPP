@@ -93,6 +93,7 @@ button.pri:hover{background:#7d4a2a}nav button:hover:not(.on){background:var(--f
 @media(prefers-reduced-motion:reduce){*,::before,::after{animation:none!important;transition:none!important}}
 .pw{position:relative}.pw input{padding-right:3rem}.pw .eye{position:absolute;right:4px;top:3px;height:36px;min-height:0;border:0;background:none;padding:0 .6rem;color:var(--mut)}.pw .eye svg{width:22px;height:22px;display:block}.pw .eye:hover{color:var(--acc)}
 [hidden]{display:none!important}
+#upd{position:fixed;left:.7rem;right:.7rem;bottom:calc(.7rem + env(safe-area-inset-bottom));z-index:90;background:var(--ink);color:#fff;padding:.7rem .9rem;border-radius:12px;display:flex;gap:.8rem;align-items:center;justify-content:space-between;box-shadow:0 8px 24px #0005;animation:slide .3s}#upd button{flex:none}
 .tag.listo{background:#3f6f8f}button.hnd{background:var(--ok);border-color:var(--ok);color:#fff;font-weight:600}
 .sv{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:.2rem 1rem 1rem;margin-bottom:1.2rem}.sv h3{display:flex;align-items:center;gap:.6rem}.sv.s{border-left:6px solid var(--acc)}.sv.l{border-left:6px solid #3f6f8f}.sv table{box-shadow:none}
 td.nw{white-space:nowrap}
@@ -231,6 +232,7 @@ async function start(){
   S.u={id:session.user.id};S.anim=true;
   await load();if(!S.u)return;
   if(!S.u.role)return forceOut('No se pudo conectar. Intenta de nuevo.');
+  try{const dr=sessionStorage.getItem('draft');if(dr){sessionStorage.removeItem('draft');S.d=JSON.parse(dr);dm()}}catch(e){}
   sb.rpc('start_session').then(r=>{S.sid=r.data;beat()});
   connectRT();
   clearInterval(hb);hb=setInterval(beat,20000);
@@ -521,5 +523,25 @@ document.addEventListener('contextmenu',e=>{if(shield()&&!e.target.closest('inpu
 addEventListener('beforeprint',()=>{if(shield())attempt()});
 // Actualización automática: al volver a la pestaña, recuperar internet o reabrir la página
 document.addEventListener('visibilitychange',resync);addEventListener('focus',resync);addEventListener('online',resync);addEventListener('pageshow',resync);
+// Actualización automática de la app: detecta una versión nueva publicada en GitHub y recarga sola
+const BUILD='2026-10-10-3';
+let _vh=null;
+const hashS=s=>{let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return h+':'+s.length};
+async function doReload(){
+  try{if(S.d&&S.d.l)sessionStorage.setItem('draft',JSON.stringify(S.d))}catch(e){}
+  try{await fetch(location.href.split('#')[0],{cache:'reload'})}catch(e){}location.reload()}
+function tryReload(){if(S.sv||(T&&T.on))return;doReload()}
+async function checkVersion(){
+  if(S.newVer)return;
+  try{
+    const r=await fetch(location.pathname+'?_='+Date.now(),{cache:'no-store'});if(!r.ok)return;
+    const t=await r.text(),m=/const BUILD='([^']+)'/.exec(t),h=hashS(t);
+    const changed=(m&&m[1]!==BUILD)||(_vh&&_vh!==h);_vh=h;
+    if(changed){S.newVer=true;tryReload();setInterval(tryReload,1000)}
+  }catch(e){}
+}
+setTimeout(checkVersion,4000);setInterval(checkVersion,60000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkVersion()});
+addEventListener('online',checkVersion);addEventListener('pageshow',checkVersion);
 start();
 </script></body></html>
