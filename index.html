@@ -176,14 +176,15 @@ let hb;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>parseFloat(String(v??'').replace(',','.'))||0;
+const r2=n=>Math.round((+n+Number.EPSILON)*100)/100; // redondeo a centavos (evita errores de decimales)
 const money=n=>'$'+(+n||0).toFixed(2);
 let S={staff:{},h:{shifts:[],open:{},d:{},ord:{}},users:[],logs:[],u:null,tab:'pedidos',prods:[],orders:[],items:[],pays:[],exps:[],opens:[],d:null,p:null,sel:null};
 const itemsOf=id=>S.items.filter(i=>i.order_id===id);
-const total=id=>itemsOf(id).reduce((a,i)=>a+i.qty*i.price,0);
+const total=id=>r2(itemsOf(id).reduce((a,i)=>a+i.qty*i.price,0));
 const status=o=>{const it=itemsOf(o.id);if(!it.every(i=>i.delivered))return 'pendiente';return it.some(i=>i.take_away&&!i.handed)?'listo':'entregado'};
 const isPaid=o=>{const it=itemsOf(o.id);return it.length>0&&it.every(i=>i.paid)};
 const done=o=>isPaid(o)&&status(o)==='entregado';
-const paidAmt=id=>itemsOf(id).filter(i=>i.paid).reduce((a,i)=>a+i.qty*i.price,0);
+const paidAmt=id=>r2(itemsOf(id).filter(i=>i.paid).reduce((a,i)=>a+i.qty*i.price,0));
 const can=t=>(PERMS[S.u.role]||PERMS.mesero).includes(t);
 const fail=r=>{if(r&&r.error){document.body.classList.remove('busy');alert('Error: '+r.error.message);return true}};
 const wrap=(h,nw,c='')=>`<div class="ov ${nw?'nw':''} ${c}"><div class=sheet>${h}</div></div>`;
@@ -282,7 +283,7 @@ const cashInfo=id=>{const all=S.pays.filter(p=>p.order_id===id),split=all.length
   const row=(k,v,cl='')=>`<div class="pdr ${cl}"><span>${k}</span><b>${v}</b></div>`;
   return `<details class=pd><summary>Detalles del pago</summary><div class=pdb>${c.map(p=>{const ef=p.method==='efectivo';
     return `<div class=pdp>${split?`<div class=pdh><b>Persona ${p.person}</b><span class="tag ${ef?'cobrado':'listo'}">${ef?'Efectivo':'Transferencia'}</span></div>`:''}${ef?row('Recibido',money(p.received??p.amount))+row('Cambio',money(p.change_given??0),'chv'):''}</div>`}).join('')}</div></details>`};
-const cajaTot=()=>{const f=m=>S.pays.filter(p=>p.method===m).reduce((a,p)=>a+ +p.amount,0),ex=S.exps.reduce((a,x)=>a+ +x.amount,0),open=(S.opens||[]).reduce((a,x)=>a+ +x.amount,0);return{open,cash:f('efectivo'),tr:f('transferencia'),ex,box:open+f('efectivo')-ex}};
+const cajaTot=()=>{const f=m=>r2(S.pays.filter(p=>p.method===m).reduce((a,p)=>a+ +p.amount,0)),ex=r2(S.exps.reduce((a,x)=>a+ +x.amount,0)),open=r2((S.opens||[]).reduce((a,x)=>a+ +x.amount,0));return{open,cash:f('efectivo'),tr:f('transferencia'),ex,box:r2(open+f('efectivo')-ex)}};
 const sumBox=t=>`<table><tr><td>Caja inicial (al empezar la jornada)</td><td class=n>${money(t.open)}</td></tr><tr><td>Pagos en efectivo</td><td class=n>${money(t.cash)}</td></tr><tr><td>Pagos por transferencia</td><td class=n>${money(t.tr)}</td></tr><tr><td>Retiros de caja (compras)</td><td class=n>−${money(t.ex)}</td></tr><tr><th>Efectivo que debe haber en caja</th><th class=n>${money(t.box)}</th></tr><tr><th>Total vendido</th><th class=n>${money(t.cash+t.tr)}</th></tr></table>`;
 const openCard=()=>{const op=S.opens||[],tot=op.reduce((a,x)=>a+ +x.amount,0),adm=S.u.role==='admin';
   return `<section class="sv s"><h3>Caja inicial <span class="tag cobrado">${money(tot)}</span></h3><p style="margin:0 0 .6rem;color:var(--mut)">Dinero que había en caja al iniciar la jornada. Va aparte de las ventas.</p>${op.length?`<div class=scroll><table>${op.map(x=>`<tr><td>${esc(x.note||'Caja inicial')}<small style="display:block;color:var(--mut)">${esc(uname(x.created_by))} · ${fmt(x.created_at)}</small></td><td class=n>${money(x.amount)}</td>${adm?`<td class=n><button data-act=eo data-id=${x.id}>Editar</button> <button class=x data-act=dop data-id=${x.id}>Eliminar</button></td>`:''}</tr>`).join('')}</table></div>`:'<p class=empty style="padding:.4rem 0">Aún no se ha registrado la caja inicial de esta jornada.</p>'}</section>`};
@@ -343,8 +344,8 @@ function render(){
 }
 
 // ---------- Pedido nuevo / agregar ----------
-const pr=(p,t)=>+p.price+(t?+p.take_extra||0:0);
-const dtotal=()=>Object.entries(S.d.l).reduce((a,[id,l])=>{const p=S.prods.find(x=>x.id==id);return a+(p?l.q*pr(p,l.t):0)},0);
+const pr=(p,t)=>r2(+p.price+(t?+p.take_extra||0:0));
+const dtotal=()=>r2(Object.entries(S.d.l).reduce((a,[id,l])=>{const p=S.prods.find(x=>x.id==id);return a+(p?l.q*pr(p,l.t):0)},0));
 function fp(v){S.pq=v;const q=norm(v.trim());let n=0;document.querySelectorAll('#ptab tr[data-n]').forEach(r=>{const h=!!q&&!r.dataset.n.includes(q);r.hidden=h;if(!h)n++});$('#pnr').hidden=n>0;$('#pc').textContent=q?`(${n} de ${S.prods.length})`:`(${S.prods.length})`}
 function fq(v){S.d.q=v;const q=norm(v.trim());let n=0;document.querySelectorAll('.prow').forEach(r=>{const h=!!q&&!r.dataset.n.includes(q);r.hidden=h;if(!h)n++});$('#nr').hidden=n>0}
 function dm(){const d=S.d;
@@ -367,9 +368,9 @@ async function saveDraft(){
 // ---------- Pago ----------
 const ASKMSG='Este pedido tiene productos para llevar.\n\n¿Ya se los entregaste al cliente?\n\nAceptar = Sí, ya los entregué\nCancelar = No (no se hace nada)';
 const units=oid=>itemsOf(oid).filter(i=>S.p.ids.includes(i.id)).flatMap(i=>Array.from({length:i.qty},()=>({n:i.name,p:+i.price,t:i.take_away})));
-const ptot=k=>{const u=units(S.p.oid);return u.reduce((a,x,i)=>a+(S.p.a[i]===k?x.p:0),0)};
-function chg(k){const p=S.p,t=ptot(k),r=num(p.rc[k]),d=r-t;return p.mt[k]==='efectivo'?(d>=0?`Cambio a entregar: ${money(d)}`:`Falta: ${money(-d)}`):'Solo se registra la transferencia'}
-function pm(){const p=S.p,u=units(p.oid),all=u.reduce((a,x)=>a+x.p,0);let h;
+const ptot=k=>{const u=units(S.p.oid);return r2(u.reduce((a,x,i)=>a+(S.p.a[i]===k?x.p:0),0))};
+function chg(k){const p=S.p,t=ptot(k),r=num(p.rc[k]),d=r2(r-t);return p.mt[k]==='efectivo'?(d>=0?`Cambio a entregar: ${money(d)}`:`Falta: ${money(-d)}`):'Solo se registra la transferencia'}
+function pm(){const p=S.p,u=units(p.oid),all=r2(u.reduce((a,x)=>a+x.p,0));let h;
   if(!p.mode)h=`<h2>Pagar · ${money(all)}</h2>${paidAmt(p.oid)>0?`<p>Ya se cobró ${money(paidAmt(p.oid))}; aquí se cobra solo lo pendiente.</p>`:''}<p>¿Cómo van a pagar?</p><div class=seg><button class=pri data-act=pmode data-v=single>Una sola cuenta</button><button data-act=pmode data-v=split>Cuenta dividida</button></div><button data-act=cm>Cancelar</button>`;
   else if(!p.n)h=`<h2>Cuenta dividida</h2><label>¿Entre cuántas personas?<input id=np type=number min=2 value=2 inputmode=numeric></label><div class=seg><button data-act=pback>Atrás</button><button class=pri data-act=pn>Continuar</button></div>`;
   else{const person=k=>`<div class="box ${S.sel!==null?'hot':''}" data-p=${k}><h4><span>${p.mode==='split'?'Persona '+(k+1):'Cuenta única'}</span><b id=pt${k}>${money(ptot(k))}</b></h4>
@@ -382,9 +383,9 @@ function pm(){const p=S.p,u=units(p.oid),all=u.reduce((a,x)=>a+x.p,0);let h;
 }
 async function savePay(){
   const p=S.p;if(p.a.includes(-1))return alert('Asigna todos los productos a una persona.');
-  const rows=[];for(let k=0;k<p.n;k++){const t=ptot(k);if(t<=0)continue;const r=num(p.rc[k]);
+  const rows=[];for(let k=0;k<p.n;k++){const t=ptot(k);if(t<=0)continue;const r=r2(num(p.rc[k]));
     if(p.mt[k]==='efectivo'&&r<t)return alert(`Persona ${k+1}: el valor recibido es menor al total.`);
-    rows.push({order_id:p.oid,person:k+1,method:p.mt[k],amount:t,received:p.mt[k]==='efectivo'?r:null,change_given:p.mt[k]==='efectivo'?r-t:null})}
+    rows.push({order_id:p.oid,person:k+1,method:p.mt[k],amount:t,received:p.mt[k]==='efectivo'?r:null,change_given:p.mt[k]==='efectivo'?r2(r-t):null})}
   if(p.ask&&!p.ok){if(!confirm(ASKMSG))return closeM();p.ok=true}
   if(fail(await sb.from('payments').insert(rows)))return;
   if(p.ok){const hid=itemsOf(p.oid).filter(i=>i.take_away&&!i.handed).map(i=>i.id);if(hid.length&&fail(await sb.from('order_items').update({delivered:true,handed:true}).in('id',hid)))return}
@@ -460,7 +461,7 @@ async function onClick(e){
   if(a==='ud'){const u=S.users.find(x=>x.id===D.uid);if(!confirm(`¿Eliminar a ${u.username}? No podrá volver a ingresar.`))return;fail(await sb.rpc('admin_delete_user',{uid:u.id}));return load()}
   if(a==='np'||a==='ep'){const p=S.prods.find(x=>x.id===id)||{name:'',price:'',category:'General',take_extra:0};S.d={pid:a==='ep'?id:null};
     setM(`<h2>${a==='ep'?'Editar':'Nuevo'} producto</h2><label>Nombre<input id=pn value="${esc(p.name)}"></label><label>Categoría<input id=pcat value="${esc(p.category)}"></label><label>Precio<input id=pp type=text inputmode=decimal autocomplete=off placeholder="0.00" value="${p.price}"></label><label>Recargo para llevar (se suma al precio)<input id=pt type=text inputmode=decimal autocomplete=off placeholder="0.00" value="${p.take_extra||''}"></label><div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=spr>Guardar</button></div>`);return}
-  if(a==='spr'){const v={name:$('#pn').value.trim(),category:$('#pcat').value.trim()||'General',price:num($('#pp').value),take_extra:num($('#pt').value)};if(!v.name||!(v.price>=0)||$('#pp').value==='')return alert('Completa nombre y precio.');
+  if(a==='spr'){const v={name:$('#pn').value.trim(),category:$('#pcat').value.trim()||'General',price:r2(num($('#pp').value)),take_extra:r2(num($('#pt').value))};if(!v.name||!(v.price>=0)||$('#pp').value==='')return alert('Completa nombre y precio.');
     const r=S.d.pid?await sb.from('products').update(v).eq('id',S.d.pid):await sb.from('products').insert(v);if(fail(r))return;closeM();return load()}
   if(a==='dp'){if(confirm('¿Eliminar este producto? Los pedidos existentes conservan su nombre y precio.')){fail(await sb.from('products').delete().eq('id',id));load()}return}
   if(a==='exp'){setM(`<h2>Retirar dinero de caja</h2><label>Monto<input id=ea type=text inputmode=decimal autocomplete=off placeholder="0.00"></label><label>Detalle de la compra<input id=ed></label><div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=se>Guardar retiro</button></div>`);return}
@@ -468,18 +469,18 @@ async function onClick(e){
     if(S.u.role!=='admin')return alert('Solo el administrador puede modificar o eliminar retiros de caja.');
     if(a==='ee'){const x=S.exps.find(y=>y.id===id);if(!x)return;S.d={eid:id};setM(`<h2>Editar retiro</h2><label>Monto<input id=ea type=text inputmode=decimal autocomplete=off value="${x.amount}"></label><label>Detalle de la compra<input id=ed value="${esc(x.detail)}"></label><div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=see>Guardar cambios</button></div>`);return}
     if(a==='de'){if(!confirm('¿Eliminar este retiro? La caja se recalculará.'))return;fail(await sb.from('expenses').delete().eq('id',id));return load()}
-    const amount=num($('#ea').value),detail=$('#ed').value.trim();if(!(amount>0)||!detail)return alert('Escribe el monto y el detalle.');
+    const amount=r2(num($('#ea').value)),detail=$('#ed').value.trim();if(!(amount>0)||!detail)return alert('Escribe el monto y el detalle.');
     if(fail(await sb.from('expenses').update({amount,detail}).eq('id',S.d.eid)))return;closeM();return load()}
   if(a==='ao'){setM(`<h2>Agregar caja inicial</h2><p style="margin:0;color:var(--mut)">Dinero que hay en caja al iniciar la jornada.</p><label>Monto<input id=oa type=text inputmode=decimal autocomplete=off placeholder="0.00"></label><label>Detalle (opcional)<input id=on placeholder="Ej. Billetes y monedas"></label><div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=sao>Guardar</button></div>`);return}
-  if(a==='sao'){const amount=num($('#oa').value);if(!(amount>0))return alert('Escribe el monto.');
+  if(a==='sao'){const amount=r2(num($('#oa').value));if(!(amount>0))return alert('Escribe el monto.');
     if(fail(await sb.from('openings').insert({amount,note:$('#on').value.trim()||null})))return;closeM();return load()}
   if(a==='eo'||a==='dop'||a==='seo'){
     if(S.u.role!=='admin')return alert('Solo el administrador puede modificar o eliminar la caja inicial.');
     if(a==='eo'){const x=(S.opens||[]).find(y=>y.id===id);if(!x)return;S.d={oid2:id};setM(`<h2>Editar caja inicial</h2><label>Monto<input id=oa type=text inputmode=decimal autocomplete=off value="${x.amount}"></label><label>Detalle (opcional)<input id=on value="${esc(x.note||'')}"></label><div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=seo>Guardar cambios</button></div>`);return}
     if(a==='dop'){if(!confirm('¿Eliminar este registro de caja inicial?'))return;fail(await sb.from('openings').delete().eq('id',id));return load()}
-    const amount=num($('#oa').value);if(!(amount>0))return alert('Escribe el monto.');
+    const amount=r2(num($('#oa').value));if(!(amount>0))return alert('Escribe el monto.');
     if(fail(await sb.from('openings').update({amount,note:$('#on').value.trim()||null}).eq('id',S.d.oid2)))return;closeM();return load()}
-  if(a==='se'){const amount=num($('#ea').value),detail=$('#ed').value.trim();if(!(amount>0)||!detail)return alert('Escribe el monto y el detalle.');
+  if(a==='se'){const amount=r2(num($('#ea').value)),detail=$('#ed').value.trim();if(!(amount>0)||!detail)return alert('Escribe el monto y el detalle.');
     if(fail(await sb.from('expenses').insert({amount,detail})))return;closeM();return load()}
   if(a==='end'){const open=S.orders.filter(o=>!done(o)).length;
     setM(`<h2>Terminar jornada</h2>${open?`<p class=err>Hay ${open} pedido(s) sin terminar (por cobrar o por entregar); seguirán en la cola de la siguiente jornada.</p>`:''}${sumBox(cajaTot())}<div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=close>Cerrar jornada</button></div>`);return}
@@ -524,7 +525,7 @@ addEventListener('beforeprint',()=>{if(shield())attempt()});
 // Actualización automática: al volver a la pestaña, recuperar internet o reabrir la página
 document.addEventListener('visibilitychange',resync);addEventListener('focus',resync);addEventListener('online',resync);addEventListener('pageshow',resync);
 // Actualización automática de la app: detecta una versión nueva publicada en GitHub y recarga sola
-const BUILD='2026-10-10-3';
+const BUILD='2026-10-10-4';
 let _vh=null;
 const hashS=s=>{let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return h+':'+s.length};
 async function doReload(){
