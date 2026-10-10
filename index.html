@@ -157,6 +157,9 @@ input[type=checkbox]:active{transform:scale(.88)}
 .ov.pay .boards{grid-template-columns:1fr}.ov.pay .box{min-height:0}
 .ov.pay .sheet>.bar{position:sticky;bottom:-.7rem;background:#fff;padding:.6rem 0 calc(.6rem + env(safe-area-inset-bottom));margin:0;z-index:4;border-top:1px solid var(--line);justify-content:flex-end;flex-shrink:0}
 }
+.rcp{border:1px solid var(--line);border-radius:12px;padding:.8rem;background:var(--foam);display:flex;flex-direction:column;gap:.35rem}
+.rr{display:flex;justify-content:space-between;align-items:center;gap:1rem;font-size:1.1rem}.rr b{font-size:1.25rem}
+.rr.cb{border-top:1px dashed var(--line);margin-top:.3rem;padding-top:.6rem;color:var(--ok)}.rr.cb b{font-size:1.9rem;font-weight:800;color:var(--ok)}
 </style></head><body><div id="app"></div><div id="modal"></div>
 <script>
 // ===== CONFIGURACIÓN: pega aquí los datos de tu proyecto Supabase (Settings > API) =====
@@ -392,7 +395,15 @@ async function savePay(){
   if(fail(await sb.from('order_items').update({paid:true}).in('id',p.ids)))return;
   const rem=await sb.from('order_items').select('id',{count:'exact',head:true}).eq('order_id',p.oid).eq('paid',false);
   if(fail(await sb.from('orders').update({paid:rem.count===0,paid_at:new Date().toISOString()}).eq('id',p.oid)))return;
-  closeM();load();
+  // El pago ya quedó guardado: se muestra un informe de ayuda para el mesero
+  const tn=S.orders.find(o=>o.id===p.oid)?.table_name||'';
+  S.p=null;S.sel=null;S.d=null;
+  setM(`<h2>✓ Pago guardado</h2><p style="margin:0;color:var(--mut)">${esc(tn)} · Confirma los valores con el cliente y pulsa Aceptar.</p>${rows.map(r=>{const ef=r.method==='efectivo';
+    return `<div class=rcp><div class=pdh><b>${rows.length>1?'Persona '+r.person:'Cuenta única'}</b><span class="tag ${ef?'cobrado':'listo'}">${ef?'Efectivo':'Transferencia'}</span></div>
+    <div class=rr><span>Valor a pagar</span><b>${money(r.amount)}</b></div>
+    ${ef?`<div class=rr><span>Valor recibido</span><b>${money(r.received)}</b></div><div class="rr cb"><span>Cambio a entregar</span><b>${money(r.change_given)}</b></div>`:'<div class=rr><span>Pago por transferencia</span><b>Sin cambio</b></div>'}</div>`}).join('')}<div class=bar><button class=pri data-act=cm>Aceptar</button></div>`);
+  const sh=document.querySelector('#modal .sheet');if(sh)sh.scrollTop=0;
+  load();
 }
 
 // ---------- Eventos ----------
@@ -525,7 +536,7 @@ addEventListener('beforeprint',()=>{if(shield())attempt()});
 // Actualización automática: al volver a la pestaña, recuperar internet o reabrir la página
 document.addEventListener('visibilitychange',resync);addEventListener('focus',resync);addEventListener('online',resync);addEventListener('pageshow',resync);
 // Actualización automática de la app: detecta una versión nueva publicada en GitHub y recarga sola
-const BUILD='2026-10-10-4';
+const BUILD='2026-10-10-5';
 let _vh=null;
 const hashS=s=>{let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return h+':'+s.length};
 async function doReload(){
