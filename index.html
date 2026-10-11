@@ -157,6 +157,8 @@ input[type=checkbox]:active{transform:scale(.88)}
 .ov.pay .boards{grid-template-columns:1fr}.ov.pay .box{min-height:0}
 .ov.pay .sheet>.bar{position:sticky;bottom:-.7rem;background:#fff;padding:.6rem 0 calc(.6rem + env(safe-area-inset-bottom));margin:0;z-index:4;border-top:1px solid var(--line);justify-content:flex-end;flex-shrink:0}
 }
+.cam{background:#000;border-radius:12px;overflow:hidden;display:flex;justify-content:center;min-height:200px}
+.cam video,.cam img{width:100%;max-height:60dvh;object-fit:contain;display:block}
 .rcp{border:1px solid var(--line);border-radius:12px;padding:.8rem;background:var(--foam);display:flex;flex-direction:column;gap:.35rem}
 .rr{display:flex;justify-content:space-between;align-items:center;gap:1rem;font-size:1.1rem}.rr b{font-size:1.25rem}
 .rr.cb{border-top:1px dashed var(--line);margin-top:.3rem;padding-top:.6rem;color:var(--ok)}.rr.cb b{font-size:1.9rem;font-weight:800;color:var(--ok)}
@@ -192,7 +194,7 @@ const can=t=>(PERMS[S.u.role]||PERMS.mesero).includes(t);
 const fail=r=>{if(r&&r.error){document.body.classList.remove('busy');alert('Error: '+r.error.message);return true}};
 const wrap=(h,nw,c='')=>`<div class="ov ${nw?'nw':''} ${c}"><div class=sheet>${h}</div></div>`;
 function setM(h,c=''){const m=$('#modal'),o=m.querySelector('.sheet'),st=o?o.scrollTop:0;m.innerHTML=wrap(h,!o,c);if(o)m.querySelector('.sheet').scrollTop=st}
-const closeM=()=>{$('#modal').innerHTML='';S.d=S.p=S.sel=null};
+const closeM=()=>{stopCam();S.cam=null;$('#modal').innerHTML='';S.d=S.p=S.sel=null};
 
 // ---------- Datos ----------
 async function load(q){
@@ -297,7 +299,7 @@ function view(){
     const sec=(title,cls,m)=>{const k=Object.keys(m).sort(),tot=k.reduce((a,n)=>a+m[n],0);
       return `<section class="sv ${cls}"><h3>${title} <span class="tag ${cls==='s'?'cobrado':'listo'}">${tot}</span></h3>${k.length?`<div class=scroll><table><tr><th>Producto</th><th class=n>Cantidad</th></tr>${k.map(n=>`<tr><td>${esc(n)}</td><td class=n><b>${m[n]}</b></td></tr>`).join('')}</table></div>`:'<p class=empty style="padding:.8rem 0">Nada pendiente.</p>'}</section>`};
     return `<div class=bar><b>Pendiente por entregar, sumando todos los pedidos</b></div>${sec('Para servir · primero','s',sv)}${sec('Para llevar · después','l',ll)}`}
-  if(t==='pagados'){const l=S.orders.filter(done).reverse();return `<div class=bar><b>Pedidos pagados en esta jornada</b></div>${l.length?`<div class=grid>${l.map(o=>`<article class=card><header><b>${esc(o.table_name)}</b><span class="tag pagado">pagado</span></header><ul>${itemsOf(o.id).map(i=>`<li><span>${esc(i.name)} <em>${i.take_away?'para llevar':'para servir'}</em></span><div class=sub>${i.qty} × ${money(i.price)} = <b>${money(i.qty*i.price)}</b></div></li>`).join('')}</ul>${cashInfo(o.id)}<footer><b>${money(total(o.id))}</b><small>${S.pays.filter(p=>p.order_id===o.id).map(p=>p.method).join(', ')}</small>${S.u.role==='admin'?`<button class="x dan" data-act=do data-id=${o.id}>Eliminar</button>`:''}</footer></article>`).join('')}</div>`:'<p class=empty>Aún no hay pedidos pagados.</p>'}`}
+  if(t==='pagados'){const l=S.orders.filter(done).reverse();return `<div class=bar><b>Pedidos pagados en esta jornada</b></div>${l.length?`<div class=grid>${l.map(o=>`<article class=card><header><b>${esc(o.table_name)}</b><span class="tag pagado">pagado</span></header><ul>${itemsOf(o.id).map(i=>`<li><span>${esc(i.name)} <em>${i.take_away?'para llevar':'para servir'}</em></span><div class=sub>${i.qty} × ${money(i.price)} = <b>${money(i.qty*i.price)}</b></div></li>`).join('')}</ul>${cashInfo(o.id)}<footer><b>${money(total(o.id))}</b><small>${S.pays.filter(p=>p.order_id===o.id).map(p=>p.method).join(', ')}</small>${S.u.role==='admin'&&S.pays.some(p=>p.order_id===o.id&&p.method==='transferencia')?`<button data-act=vp data-id=${o.id}>Ver comprobante</button>`:''}${S.u.role==='admin'?`<button class="x dan" data-act=do data-id=${o.id}>Eliminar</button>`:''}</footer></article>`).join('')}</div>`:'<p class=empty>Aún no hay pedidos pagados.</p>'}`}
   if(t==='caja'){return `<div class=bar><b>Caja de la jornada</b><button data-act=ao>Agregar caja</button><button data-act=exp>Retirar de caja</button><button class=pri data-act=end>Terminar jornada</button></div>${openCard()}<div class=scroll>${sumBox(cajaTot())}</div>
     ${S.exps.length?`<h3>Retiros</h3><div class=scroll><table>${S.exps.map(x=>`<tr><td>${esc(x.detail)}<small style="display:block;color:var(--mut)">${esc(uname(x.created_by))} · ${fmt(x.created_at)}</small></td><td class=n>${money(x.amount)}</td>${S.u.role==='admin'?`<td class=n><button data-act=ee data-id=${x.id}>Editar</button> <button class=x data-act=de data-id=${x.id}>Eliminar</button></td>`:''}</tr>`).join('')}</table></div>`:''}`}
   if(t==='historial'){const H=S.h;
@@ -306,7 +308,7 @@ function view(){
     ${op?(d?`${sumBox({open:+sh.opening_cash||0,cash,tr,ex,box:(+sh.opening_cash||0)+cash-ex})}${d.e.length?`<h4>Retiros de caja</h4><ul>${d.e.map(x=>`<li><span>${esc(x.detail)}<small style="display:block;color:var(--mut)">${esc(uname(x.created_by))}</small></span><b>−${money(x.amount)}</b></li>`).join('')}</ul>`:''}
     <h4>${d.o.length} pedido(s) vendidos</h4>${d.o.map(o=>{const it=o.order_items||[],tot=it.reduce((a,i)=>a+i.qty*i.price,0),pays=d.p.filter(p=>p.order_id===o.id),paid=pays.reduce((a,p)=>a+ +p.amount,0)||tot,oo=H.ord[o.id];
     return `<div class=ord><button class=hrow data-act=ho data-id=${o.id}><span>${oo?'▾':'▸'}</span><span><b>Pedido #${o.id}</b> · ${esc(uname(o.created_by))}<small>${fmtY(o.created_at)}</small></span><b>${money(paid)}</b></button>
-    ${oo?`<div class=det><small>Mesa o cliente: <b>${esc(o.table_name)}</b></small><ul>${it.map(i=>`<li><span>${esc(i.name)} <em>${i.take_away?'para llevar':'para servir'}</em></span><div class=sub>${i.qty} × ${money(i.price)} = <b>${money(i.qty*i.price)}</b></div></li>`).join('')}</ul><p class=ttl>Total <b>${money(tot)}</b></p>${pays.map(p=>`<small>${pays.length>1?'Persona '+p.person+' · ':''}${p.method} ${money(p.amount)}${+p.change_given>0?' · cambio '+money(p.change_given):''}</small>`).join('<br>')}</div>`:''}</div>`}).join('')}`:'<p class=empty>Cargando…</p>'):''}</section>`}).join(''):'<p class=empty>Aún no hay jornadas cerradas.</p>'}`}
+    ${oo?`<div class=det><small>Mesa o cliente: <b>${esc(o.table_name)}</b></small><ul>${it.map(i=>`<li><span>${esc(i.name)} <em>${i.take_away?'para llevar':'para servir'}</em></span><div class=sub>${i.qty} × ${money(i.price)} = <b>${money(i.qty*i.price)}</b></div></li>`).join('')}</ul><p class=ttl>Total <b>${money(tot)}</b></p>${pays.map(p=>`<small>${pays.length>1?'Persona '+p.person+' · ':''}${p.method} ${money(p.amount)}${+p.change_given>0?' · cambio '+money(p.change_given):''}</small>`).join('<br>')}${S.u.role==='admin'&&pays.some(p=>p.method==='transferencia')?`<div class=bar style="margin:.6rem 0 0"><button data-act=vp data-id=${o.id}>Ver comprobante</button></div>`:''}</div>`:''}</div>`}).join('')}`:'<p class=empty>Cargando…</p>'):''}</section>`}).join(''):'<p class=empty>Aún no hay jornadas cerradas.</p>'}`}
   if(t==='perfil'){const u=S.u,f=S.staff[u.id]||{},row=(k,v)=>`<tr><th>${k}</th><td>${esc(v||'—')}</td></tr>`;
     return `<div class=bar><b>Mi perfil</b><button class=pri data-act=pf data-uid=${u.id}>Editar mis datos</button></div>${f.full_name?'':'<p>Completa tus datos con “Editar mis datos”.</p>'}<div class=scroll><table>${row('Usuario',u.username)}${row('Nivel',u.role)}${row('Nombre completo',f.full_name)}${row('Cédula',f.id_number)}${row('Teléfono',f.phone)}${row('Correo de contacto',f.contact_email)}${row('Dirección',f.address)}</table></div>`}
   if(t==='usuarios'){const now=Date.now(),on=l=>l&&!l.ended_at&&now-new Date(l.last_seen)<75000,d=l=>!l?'—':dur((on(l)?now:new Date(l.ended_at||l.last_seen))-new Date(l.started_at));
@@ -390,25 +392,53 @@ async function savePay(){
     if(p.mt[k]==='efectivo'&&r<t)return alert(`Persona ${k+1}: el valor recibido es menor al total.`);
     rows.push({order_id:p.oid,person:k+1,method:p.mt[k],amount:t,received:p.mt[k]==='efectivo'?r:null,change_given:p.mt[k]==='efectivo'?r2(r-t):null})}
   if(p.ask&&!p.ok){if(!confirm(ASKMSG))return closeM();p.ok=true}
-  if(fail(await sb.from('payments').insert(rows)))return;
+  const ins=await sb.from('payments').insert(rows).select('id,person,method,amount');if(fail(ins))return;
   if(p.ok){const hid=itemsOf(p.oid).filter(i=>i.take_away&&!i.handed).map(i=>i.id);if(hid.length&&fail(await sb.from('order_items').update({delivered:true,handed:true}).in('id',hid)))return}
   if(fail(await sb.from('order_items').update({paid:true}).in('id',p.ids)))return;
   const rem=await sb.from('order_items').select('id',{count:'exact',head:true}).eq('order_id',p.oid).eq('paid',false);
   if(fail(await sb.from('orders').update({paid:rem.count===0,paid_at:new Date().toISOString()}).eq('id',p.oid)))return;
   // El pago ya quedó guardado: se muestra un informe de ayuda para el mesero
-  const tn=S.orders.find(o=>o.id===p.oid)?.table_name||'';
+  const rec={oid:p.oid,tn:S.orders.find(o=>o.id===p.oid)?.table_name||'',rows};
+  const tr=(ins.data||[]).filter(x=>x.method==='transferencia').sort((a,b)=>a.person-b.person).map(x=>({id:x.id,person:x.person,amount:+x.amount}));
   S.p=null;S.sel=null;S.d=null;
+  if(tr.length){S.cam={list:tr,i:0,st:'live',blob:null,url:null,stream:null,err:null,path:null,rec};camM()}else showReceipt(rec);
+  load();
+}
+function showReceipt(rec){const tn=rec.tn,rows=rec.rows;
   setM(`<h2>✓ Pago guardado</h2><p style="margin:0;color:var(--mut)">${esc(tn)} · Confirma los valores con el cliente y pulsa Aceptar.</p>${rows.map(r=>{const ef=r.method==='efectivo';
     return `<div class=rcp><div class=pdh><b>${rows.length>1?'Persona '+r.person:'Cuenta única'}</b><span class="tag ${ef?'cobrado':'listo'}">${ef?'Efectivo':'Transferencia'}</span></div>
     <div class=rr><span>Valor a pagar</span><b>${money(r.amount)}</b></div>
     ${ef?`<div class=rr><span>Valor recibido</span><b>${money(r.received)}</b></div><div class="rr cb"><span>Cambio a entregar</span><b>${money(r.change_given)}</b></div>`:'<div class=rr><span>Pago por transferencia</span><b>Sin cambio</b></div>'}</div>`}).join('')}<div class=bar><button class=pri data-act=cm>Aceptar</button></div>`);
   const sh=document.querySelector('#modal .sheet');if(sh)sh.scrollTop=0;
-  load();
+}
+
+// ---------- Comprobante de transferencia (la foto nunca se guarda en el celular) ----------
+function stopCam(){const c=S.cam;if(!c)return;if(c.stream){c.stream.getTracks().forEach(t=>t.stop());c.stream=null}if(c.url){URL.revokeObjectURL(c.url);c.url=null}}
+function camM(){const c=S.cam,it=c.list[c.i],multi=c.list.length>1;
+  let h=`<h2>Comprobante de transferencia</h2><p style="margin:0;color:var(--mut)">${esc(c.rec.tn)} · ${multi?'Persona '+it.person+' · ':''}${money(it.amount)}${multi?` (${c.i+1} de ${c.list.length})`:''}</p>`;
+  if(c.st==='live')h+=`<div class=cam><video id=cv autoplay playsinline muted></video></div><p style="margin:0;color:var(--mut)">Encuadra el comprobante completo, con buena luz y sin reflejos.</p><div class=bar style="justify-content:flex-end"><button class=pri data-act=snap>Tomar foto</button></div>`;
+  else if(c.st==='review')h+=`<div class=cam><img src="${c.url}" alt="Foto del comprobante"></div><p style="margin:0;color:var(--mut)">¿Se lee bien el comprobante?</p><div class=bar style="justify-content:flex-end"><button data-act=retake>Descartar y tomar otra</button><button class=pri data-act=svp>Guardar foto</button></div>`;
+  else h+=`<p class=err style="min-height:0">${esc(c.err)}</p><div class=bar style="justify-content:flex-end"><button data-act=skip>Continuar sin comprobante</button><button class=pri data-act=retake>Reintentar</button></div>`;
+  setM(h);const sh=document.querySelector('#modal .sheet');if(sh)sh.scrollTop=0;
+  if(c.st==='live')startCam();
+}
+async function startCam(){const c=S.cam;
+  try{
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('Este navegador no permite usar la cámara (requiere conexión segura https).');
+    const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1920}},audio:false});
+    if(S.cam!==c||c.st!=='live'){s.getTracks().forEach(t=>t.stop());return}
+    const v=$('#cv');if(!v){s.getTracks().forEach(t=>t.stop());return}
+    c.stream=s;v.srcObject=s;await v.play().catch(()=>{});
+  }catch(e){
+    if(S.cam!==c)return;
+    c.st='err';c.err=e&&e.name==='NotAllowedError'?'No se concedió el permiso de la cámara. Actívalo en los ajustes del navegador y pulsa Reintentar.':'No se pudo abrir la cámara: '+((e&&e.message)||(e&&e.name)||'error desconocido');
+    camM();
+  }
 }
 
 // ---------- Eventos ----------
 function assign(i,k){S.p.a[i]=k;S.sel=null;pm()}
-const MUT=['sd','sp','se','spr','close','su','spf','see','sao','seo'];
+const MUT=['sd','sp','se','spr','close','su','spf','see','sao','seo','svp'];
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');
   if(t&&MUT.includes(t.dataset.act)){if(S.sv)return;S.sv=true;const h=t.innerHTML;t.disabled=true;t.innerHTML='<span class=sp></span>Guardando…';
     return onClick(e).finally(()=>{S.sv=false;if(t.isConnected){t.disabled=false;t.innerHTML=h}})}
@@ -449,6 +479,34 @@ async function onClick(e){
   if(a==='pn'){const n=Math.min(20,Math.max(2,+$('#np').value||2));S.p.n=n;S.p.mt=Array(n).fill('efectivo');return pm()}
   if(a==='mt'){S.p.mt[+D.k]=D.v;return pm()}
   if(a==='sp')return savePay();
+  if(a==='vp'){if(S.u.role!=='admin')return alert('Solo el administrador puede ver los comprobantes.');
+    document.body.classList.add('busy');
+    const r=await sb.from('payment_proofs').select('*').eq('order_id',id).order('created_at');
+    if(fail(r))return;document.body.classList.remove('busy');
+    if(!r.data.length)return alert('Este pedido no tiene comprobantes guardados.');
+    const sg=await sb.storage.from('comprobantes').createSignedUrls(r.data.map(x=>x.path),600);if(fail(sg))return;
+    const all=[...S.pays,...Object.values(S.h.d).flatMap(x=>x.p||[])],ordPays=all.filter(y=>y.order_id===id);
+    const html=r.data.map((x,i)=>{const s=(sg.data||[]).find(y=>y.path===x.path),py=all.find(y=>y.id===x.payment_id),url=s&&s.signedUrl;
+      return `<div style="display:flex;flex-direction:column;gap:.4rem"><b>Comprobante ${i+1}${py?' · '+money(py.amount):''}${py&&ordPays.length>1?' · Persona '+py.person:''}</b><small style="color:var(--mut)">Guardado el ${fmtY(x.created_at)} por ${esc(uname(x.created_by))}</small>${url?`<a class=cam href="${esc(url)}" target=_blank rel=noopener><img src="${esc(url)}" alt="Comprobante de transferencia"></a><small style="color:var(--mut)">Toca la imagen para abrirla en tamaño completo.</small>`:'<p class=err style="min-height:0">No se pudo cargar esta imagen.</p>'}</div>`}).join('');
+    sb.rpc('log_event',{p_action:`Consultó el comprobante de transferencia (pedido #${id})`});
+    setM(`<h2>Comprobante de transferencia</h2>${html}<div class=bar style="justify-content:flex-end"><button class=pri data-act=cm>Cerrar</button></div>`);return}
+  if(a==='snap'){const c=S.cam,v=$('#cv');if(!c||!v||!v.videoWidth)return alert('La cámara aún no está lista. Espera un momento e inténtalo de nuevo.');
+    const k=Math.min(1,1600/Math.max(v.videoWidth,v.videoHeight)),cv=document.createElement('canvas');cv.width=Math.round(v.videoWidth*k);cv.height=Math.round(v.videoHeight*k);
+    cv.getContext('2d').drawImage(v,0,0,cv.width,cv.height);
+    const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',.78));if(!blob)return alert('No se pudo capturar la foto. Inténtalo de nuevo.');
+    stopCam();c.blob=blob;c.url=URL.createObjectURL(blob);c.st='review';return camM()}
+  if(a==='retake'){const c=S.cam;if(!c)return;stopCam();c.blob=null;c.path=null;c.err=null;c.st='live';return camM()}
+  if(a==='svp'){const c=S.cam;if(!c||!c.blob)return;const it=c.list[c.i];
+    if(!c.path){const path=`${c.rec.oid}/${it.id}_${Date.now()}.jpg`;
+      const up=await sb.storage.from('comprobantes').upload(path,c.blob,{contentType:'image/jpeg',upsert:false});if(fail(up))return;c.path=path}
+    if(fail(await sb.from('payment_proofs').insert({payment_id:it.id,order_id:c.rec.oid,path:c.path})))return;
+    sb.rpc('log_event',{p_action:`Guardó el comprobante de transferencia (pedido #${c.rec.oid}${c.list.length>1?', persona '+it.person:''})`});
+    stopCam();c.blob=null;c.path=null;c.i++;
+    if(c.i<c.list.length){c.st='live';return camM()}
+    const rec=c.rec;S.cam=null;return showReceipt(rec)}
+  if(a==='skip'){const c=S.cam;if(!c)return;
+    sb.rpc('log_event',{p_action:`Continuó SIN comprobante de transferencia (pedido #${c.rec.oid})`});
+    const rec=c.rec;stopCam();S.cam=null;return showReceipt(rec)}
   if(a==='hs'){S.h.open[id]=!S.h.open[id];render();if(S.h.open[id]&&!S.h.d[id])loadShift(id);return}
   if(a==='ho'){S.h.ord[id]=!S.h.ord[id];return render()}
   if(a==='pf'){const u=S.users.find(x=>x.id===D.uid)||S.u,f=S.staff[u.id]||{};S.d={uid:u.id};
@@ -536,13 +594,13 @@ addEventListener('beforeprint',()=>{if(shield())attempt()});
 // Actualización automática: al volver a la pestaña, recuperar internet o reabrir la página
 document.addEventListener('visibilitychange',resync);addEventListener('focus',resync);addEventListener('online',resync);addEventListener('pageshow',resync);
 // Actualización automática de la app: detecta una versión nueva publicada en GitHub y recarga sola
-const BUILD='2026-10-10-5';
+const BUILD='2026-10-10-7';
 let _vh=null;
 const hashS=s=>{let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return h+':'+s.length};
 async function doReload(){
   try{if(S.d&&S.d.l)sessionStorage.setItem('draft',JSON.stringify(S.d))}catch(e){}
   try{await fetch(location.href.split('#')[0],{cache:'reload'})}catch(e){}location.reload()}
-function tryReload(){if(S.sv||(T&&T.on))return;doReload()}
+function tryReload(){if(S.sv||S.cam||(T&&T.on))return;doReload()}
 async function checkVersion(){
   if(S.newVer)return;
   try{
