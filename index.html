@@ -392,17 +392,36 @@ async function savePay(){
     if(p.mt[k]==='efectivo'&&r<t)return alert(`Persona ${k+1}: el valor recibido es menor al total.`);
     rows.push({order_id:p.oid,person:k+1,method:p.mt[k],amount:t,received:p.mt[k]==='efectivo'?r:null,change_given:p.mt[k]==='efectivo'?r2(r-t):null})}
   if(p.ask&&!p.ok){if(!confirm(ASKMSG))return closeM();p.ok=true}
-  const ins=await sb.from('payments').insert(rows).select('id,person,method,amount');if(fail(ins))return;
-  if(p.ok){const hid=itemsOf(p.oid).filter(i=>i.take_away&&!i.handed).map(i=>i.id);if(hid.length&&fail(await sb.from('order_items').update({delivered:true,handed:true}).in('id',hid)))return}
-  if(fail(await sb.from('order_items').update({paid:true}).in('id',p.ids)))return;
-  const rem=await sb.from('order_items').select('id',{count:'exact',head:true}).eq('order_id',p.oid).eq('paid',false);
-  if(fail(await sb.from('orders').update({paid:rem.count===0,paid_at:new Date().toISOString()}).eq('id',p.oid)))return;
-  // El pago ya quedó guardado: se muestra un informe de ayuda para el mesero
   const rec={oid:p.oid,tn:S.orders.find(o=>o.id===p.oid)?.table_name||'',rows};
-  const tr=(ins.data||[]).filter(x=>x.method==='transferencia').sort((a,b)=>a.person-b.person).map(x=>({id:x.id,person:x.person,amount:+x.amount}));
-  S.p=null;S.sel=null;S.d=null;
-  if(tr.length){S.cam={list:tr,i:0,st:'live',blob:null,url:null,stream:null,err:null,path:null,rec};camM()}else showReceipt(rec);
-  load();
+  const tr=rows.filter(r=>r.method==='transferencia').map(r=>({person:r.person,amount:r.amount}));
+  // Con transferencia: primero la foto del comprobante; el pago se guarda al guardar la foto (se puede cancelar y cambiar a efectivo)
+  if(tr.length){stopCam();S.cam={list:tr,i:0,st:'live',blob:null,url:null,stream:null,err:null,photos:{},paths:{},upl:{},ups:{},rows,rec,ins:null,s2:false};return camM()}
+  const st=(p.st&&p.st.ins)?p.st:(p.st={rows,ins:null,s2:false});rec.rows=st.rows;
+  if(!await commitPay(st))return;
+  S.p=null;S.sel=null;S.d=null;showReceipt(rec);load();
+}
+// Guarda el pago en la base de datos (se puede reintentar sin duplicar pagos)
+async function commitPay(st){const p=S.p;
+  if(!st.ins){const r=await sb.from('payments').insert(st.rows).select('id,person,method,amount');if(fail(r))return false;st.ins=r.data||[]}
+  if(!st.s2){
+    if(p.ok){const hid=itemsOf(p.oid).filter(i=>i.take_away&&!i.handed).map(i=>i.id);if(hid.length&&fail(await sb.from('order_items').update({delivered:true,handed:true}).in('id',hid)))return false}
+    if(fail(await sb.from('order_items').update({paid:true}).in('id',p.ids)))return false;
+    const rem=await sb.from('order_items').select('id',{count:'exact',head:true}).eq('order_id',p.oid).eq('paid',false);
+    if(fail(await sb.from('orders').update({paid:rem.count===0,paid_at:new Date().toISOString()}).eq('id',p.oid)))return false;
+    st.s2=true}
+  return true}
+// Guarda el pago y sube las fotos de los comprobantes
+async function finishCam(){const c=S.cam;
+  if(!await commitPay(c))return;
+  for(const it of c.list){
+    if(c.ups[it.person])continue;
+    const py=(c.ins||[]).find(x=>x.person===it.person&&x.method==='transferencia');if(!py)continue;
+    const path=c.paths[it.person]||(c.paths[it.person]=`${c.rec.oid}/${py.id}_${Date.now()}.jpg`);
+    if(!c.upl[it.person]){const up=await sb.storage.from('comprobantes').upload(path,c.photos[it.person],{contentType:'image/jpeg',upsert:false});if(fail(up))return;c.upl[it.person]=true}
+    if(fail(await sb.from('payment_proofs').insert({payment_id:py.id,order_id:c.rec.oid,path})))return;
+    sb.rpc('log_event',{p_action:`Guardó el comprobante de transferencia (pedido #${c.rec.oid}${c.list.length>1?', persona '+it.person:''})`});
+    c.ups[it.person]=true}
+  const rec=c.rec;stopCam();S.cam=null;S.p=null;S.sel=null;S.d=null;showReceipt(rec);load();
 }
 function showReceipt(rec){const tn=rec.tn,rows=rec.rows;
   setM(`<h2>✓ Pago guardado</h2><p style="margin:0;color:var(--mut)">${esc(tn)} · Confirma los valores con el cliente y pulsa Aceptar.</p>${rows.map(r=>{const ef=r.method==='efectivo';
@@ -415,10 +434,11 @@ function showReceipt(rec){const tn=rec.tn,rows=rec.rows;
 // ---------- Comprobante de transferencia (la foto nunca se guarda en el celular) ----------
 function stopCam(){const c=S.cam;if(!c)return;if(c.stream){c.stream.getTracks().forEach(t=>t.stop());c.stream=null}if(c.url){URL.revokeObjectURL(c.url);c.url=null}}
 function camM(){const c=S.cam,it=c.list[c.i],multi=c.list.length>1;
-  let h=`<h2>Comprobante de transferencia</h2><p style="margin:0;color:var(--mut)">${esc(c.rec.tn)} · ${multi?'Persona '+it.person+' · ':''}${money(it.amount)}${multi?` (${c.i+1} de ${c.list.length})`:''}</p>`;
-  if(c.st==='live')h+=`<div class=cam><video id=cv autoplay playsinline muted></video></div><p style="margin:0;color:var(--mut)">Encuadra el comprobante completo, con buena luz y sin reflejos.</p><div class=bar style="justify-content:flex-end"><button class=pri data-act=snap>Tomar foto</button></div>`;
-  else if(c.st==='review')h+=`<div class=cam><img src="${c.url}" alt="Foto del comprobante"></div><p style="margin:0;color:var(--mut)">¿Se lee bien el comprobante?</p><div class=bar style="justify-content:flex-end"><button data-act=retake>Descartar y tomar otra</button><button class=pri data-act=svp>Guardar foto</button></div>`;
-  else h+=`<p class=err style="min-height:0">${esc(c.err)}</p><div class=bar style="justify-content:flex-end"><button data-act=skip>Continuar sin comprobante</button><button class=pri data-act=retake>Reintentar</button></div>`;
+  const cancel=c.ins?'':`<button class=x style="margin-right:auto" data-act=ccam>Cambiar forma de pago</button>`;
+  let h=`<h2>Comprobante de transferencia</h2><p style="margin:0;color:var(--mut)">${esc(c.rec.tn)} · ${multi?'Persona '+it.person+' · ':''}${money(it.amount)}${multi?` (${c.i+1} de ${c.list.length})`:''}</p>${c.ins?'<p style="margin:0;color:var(--ok)">El pago ya quedó registrado; solo falta guardar el comprobante.</p>':''}`;
+  if(c.st==='live')h+=`<div class=cam><video id=cv autoplay playsinline muted></video></div><p style="margin:0;color:var(--mut)">Encuadra el comprobante completo, con buena luz y sin reflejos.</p><div class=bar style="justify-content:flex-end">${cancel}<button class=pri data-act=snap>Tomar foto</button></div>`;
+  else if(c.st==='review')h+=`<div class=cam><img src="${c.url}" alt="Foto del comprobante"></div><p style="margin:0;color:var(--mut)">¿Se lee bien el comprobante?</p><div class=bar style="justify-content:flex-end">${cancel}${c.ins?'<button data-act=skip>Continuar sin comprobante</button>':''}<button data-act=retake>Descartar y tomar otra</button><button class=pri data-act=svp>Guardar foto</button></div>`;
+  else h+=`<p class=err style="min-height:0">${esc(c.err)}</p><div class=bar style="justify-content:flex-end">${cancel}<button data-act=skip>Continuar sin comprobante</button><button class=pri data-act=retake>Reintentar</button></div>`;
   setM(h);const sh=document.querySelector('#modal .sheet');if(sh)sh.scrollTop=0;
   if(c.st==='live')startCam();
 }
@@ -438,7 +458,7 @@ async function startCam(){const c=S.cam;
 
 // ---------- Eventos ----------
 function assign(i,k){S.p.a[i]=k;S.sel=null;pm()}
-const MUT=['sd','sp','se','spr','close','su','spf','see','sao','seo','svp'];
+const MUT=['sd','sp','se','spr','close','su','spf','see','sao','seo','svp','skip'];
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');
   if(t&&MUT.includes(t.dataset.act)){if(S.sv)return;S.sv=true;const h=t.innerHTML;t.disabled=true;t.innerHTML='<span class=sp></span>Guardando…';
     return onClick(e).finally(()=>{S.sv=false;if(t.isConnected){t.disabled=false;t.innerHTML=h}})}
@@ -495,18 +515,16 @@ async function onClick(e){
     cv.getContext('2d').drawImage(v,0,0,cv.width,cv.height);
     const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',.78));if(!blob)return alert('No se pudo capturar la foto. Inténtalo de nuevo.');
     stopCam();c.blob=blob;c.url=URL.createObjectURL(blob);c.st='review';return camM()}
-  if(a==='retake'){const c=S.cam;if(!c)return;stopCam();c.blob=null;c.path=null;c.err=null;c.st='live';return camM()}
-  if(a==='svp'){const c=S.cam;if(!c||!c.blob)return;const it=c.list[c.i];
-    if(!c.path){const path=`${c.rec.oid}/${it.id}_${Date.now()}.jpg`;
-      const up=await sb.storage.from('comprobantes').upload(path,c.blob,{contentType:'image/jpeg',upsert:false});if(fail(up))return;c.path=path}
-    if(fail(await sb.from('payment_proofs').insert({payment_id:it.id,order_id:c.rec.oid,path:c.path})))return;
-    sb.rpc('log_event',{p_action:`Guardó el comprobante de transferencia (pedido #${c.rec.oid}${c.list.length>1?', persona '+it.person:''})`});
-    stopCam();c.blob=null;c.path=null;c.i++;
-    if(c.i<c.list.length){c.st='live';return camM()}
-    const rec=c.rec;S.cam=null;return showReceipt(rec)}
+  if(a==='retake'){const c=S.cam;if(!c)return;stopCam();c.blob=null;c.err=null;c.st='live';return camM()}
+  if(a==='ccam'){const c=S.cam;if(!c||c.ins)return;stopCam();S.cam=null;return pm()}
+  if(a==='svp'){const c=S.cam;if(!c||!c.blob)return;
+    c.photos[c.list[c.i].person]=c.blob;
+    if(c.i<c.list.length-1){stopCam();c.blob=null;c.i++;c.st='live';return camM()}
+    return finishCam()}
   if(a==='skip'){const c=S.cam;if(!c)return;
+    if(!c.ins&&!await commitPay(c))return;
     sb.rpc('log_event',{p_action:`Continuó SIN comprobante de transferencia (pedido #${c.rec.oid})`});
-    const rec=c.rec;stopCam();S.cam=null;return showReceipt(rec)}
+    const rec=c.rec;stopCam();S.cam=null;S.p=null;S.sel=null;S.d=null;showReceipt(rec);load();return}
   if(a==='hs'){S.h.open[id]=!S.h.open[id];render();if(S.h.open[id]&&!S.h.d[id])loadShift(id);return}
   if(a==='ho'){S.h.ord[id]=!S.h.ord[id];return render()}
   if(a==='pf'){const u=S.users.find(x=>x.id===D.uid)||S.u,f=S.staff[u.id]||{};S.d={uid:u.id};
@@ -594,7 +612,7 @@ addEventListener('beforeprint',()=>{if(shield())attempt()});
 // Actualización automática: al volver a la pestaña, recuperar internet o reabrir la página
 document.addEventListener('visibilitychange',resync);addEventListener('focus',resync);addEventListener('online',resync);addEventListener('pageshow',resync);
 // Actualización automática de la app: detecta una versión nueva publicada en GitHub y recarga sola
-const BUILD='2026-10-10-7';
+const BUILD='2026-10-10-8';
 let _vh=null;
 const hashS=s=>{let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return h+':'+s.length};
 async function doReload(){
