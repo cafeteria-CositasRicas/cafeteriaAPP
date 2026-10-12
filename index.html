@@ -158,6 +158,10 @@ input[type=checkbox]:active{transform:scale(.88)}
 .ov.pay .sheet>.bar{position:sticky;bottom:-.7rem;background:#fff;padding:.6rem 0 calc(.6rem + env(safe-area-inset-bottom));margin:0;z-index:4;border-top:1px solid var(--line);justify-content:flex-end;flex-shrink:0}
 }
 .tv{margin-top:.8rem;background:#fff}.tv summary{font-size:1.1rem;color:var(--ink)}.tv summary b{margin-left:auto;margin-right:.6rem;font-size:1.2rem}
+.ed{min-height:34px;width:34px;padding:0;font-size:1.05rem;color:var(--acc)}
+.card li .nt{flex-basis:100%;padding-left:34px;color:var(--acc);font-size:.92rem;font-style:italic;overflow-wrap:anywhere}
+textarea{border:1px solid var(--line);border-radius:8px;padding:.6rem;width:100%;background:#fff;font:inherit;color:inherit;resize:vertical;min-height:80px}
+textarea:focus-visible{outline:3px solid #d9a066;outline-offset:1px}
 .cam{background:#000;border-radius:12px;overflow:hidden;display:flex;justify-content:center;min-height:200px}
 .cam video,.cam img{width:100%;max-height:60dvh;object-fit:contain;display:block}
 .rcp{border:1px solid var(--line);border-radius:12px;padding:.8rem;background:var(--foam);display:flex;flex-direction:column;gap:.35rem}
@@ -282,7 +286,7 @@ function login(msg=''){
 // ---------- Vistas ----------
 function card(o){const it=itemsOf(o.id),st=status(o);
   return `<article class=card><header><b>${esc(o.table_name)}</b><span class=tags><span class="tag ${st}">${st==='listo'?'listo para retirar':st}</span>${isPaid(o)?'<span class="tag cobrado">cobrado</span>':paidAmt(o.id)>0?'<span class="tag parcial">cobro parcial</span>':''}</span></header><ul>
-  ${it.map(i=>`<li class="${i.delivered?'done':''}"><label><input type=checkbox data-act=tg data-id=${i.id} ${i.delivered?'checked':''}> <span>${esc(i.name)} <em>${i.take_away?'para llevar':'para servir'}${i.paid?' · cobrado':''}</em></span></label><div class=qt><button data-act=iq data-id=${i.id} data-d=-1 ${i.qty<2?'disabled':''} aria-label="Menos">−</button><b>${i.qty}</b><button data-act=iq data-id=${i.id} data-d=1 aria-label="Más">+</button></div><button class=x data-act=di data-id=${i.id} aria-label="Quitar">✕</button><div class=sub>${i.qty} × ${money(i.price)} = <b>${money(i.qty*i.price)}</b></div></li>`).join('')}</ul>
+  ${it.map(i=>`<li class="${i.delivered?'done':''}"><label><input type=checkbox data-act=tg data-id=${i.id} ${i.delivered?'checked':''}> <span>${esc(i.name)} <em>${i.take_away?'para llevar':'para servir'}${i.paid?' · cobrado':''}</em></span></label><div class=qt><button data-act=iq data-id=${i.id} data-d=-1 ${i.qty<2?'disabled':''} aria-label="Menos">−</button><b>${i.qty}</b><button data-act=iq data-id=${i.id} data-d=1 aria-label="Más">+</button></div><button class=ed data-act=en data-id=${i.id} aria-label="Editar comentario">✎</button><button class=x data-act=di data-id=${i.id} aria-label="Quitar">✕</button>${i.note?`<div class=nt>✎ ${esc(i.note)}</div>`:''}<div class=sub>${i.qty} × ${money(i.price)} = <b>${money(i.qty*i.price)}</b></div></li>`).join('')}</ul>
   <footer><b>${money(total(o.id))}</b>${st==='listo'&&isPaid(o)?`<button class=hnd data-act=hand data-id=${o.id}>Entregar</button>`:''}<button data-act=add data-id=${o.id}>Agregar</button>${isPaid(o)?'':`<button class=pri data-act=pay data-id=${o.id}>${paidAmt(o.id)>0?'Cobrar saldo':'Pagar'}</button>`}<button class=x data-act=do data-id=${o.id}>Eliminar</button></footer></article>`}
 const cashInfo=id=>{const all=S.pays.filter(p=>p.order_id===id),split=all.length>1,c=split?all:all.filter(p=>p.method==='efectivo');
   if(!c.length)return '';
@@ -460,7 +464,7 @@ async function startCam(){const c=S.cam;
 
 // ---------- Eventos ----------
 function assign(i,k){S.p.a[i]=k;S.sel=null;pm()}
-const MUT=['sd','sp','se','spr','close','su','spf','see','sao','seo','svp','skip'];
+const MUT=['sd','sp','se','spr','close','su','spf','see','sao','seo','svp','skip','snt'];
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');
   if(t&&MUT.includes(t.dataset.act)){if(S.sv)return;S.sv=true;const h=t.innerHTML;t.disabled=true;t.innerHTML='<span class=sp></span>Guardando…';
     return onClick(e).finally(()=>{S.sv=false;if(t.isConnected){t.disabled=false;t.innerHTML=h}})}
@@ -488,6 +492,11 @@ async function onClick(e){
     if(!confirm('¿El cliente ya retiró el pedido?'))return;fail(await sb.from('order_items').update({handed:true}).in('id',ids));return load()}
   if(a==='di'){const it=S.items.find(x=>x.id===id);if(it?.paid&&S.u.role!=='admin')return alert('Este producto ya fue cobrado. Solo el administrador puede quitarlo.');if(confirm(it?.paid?'Este producto YA fue cobrado. ¿Quitarlo de todos modos?':'¿Quitar este producto del pedido?')){const oid=it?.order_id;await sb.from('order_items').delete().eq('id',id);if(oid){const rest=itemsOf(oid).filter(x=>x.id!==id);await sb.from('orders').update({paid:rest.length>0&&rest.every(x=>x.paid)}).eq('id',oid)}load()}return}
   if(a==='do'){const cob=itemsOf(id).some(i=>i.paid);if(cob&&S.u.role!=='admin')return alert('Este pedido ya tiene pagos registrados. Solo el administrador puede eliminarlo.');if(confirm(cob?'Este pedido tiene pagos registrados; se borrarán también y cambiará la caja. ¿Eliminarlo?':'¿Eliminar el pedido completo?')){await sb.from('orders').delete().eq('id',id);load()}return}
+  if(a==='en'){const it=S.items.find(x=>x.id===id);if(!it)return;S.d={nid:id};
+    setM(`<h2>Comentario · ${esc(it.name)}</h2><label>Indicación adicional para este producto<textarea id=nt rows=3 maxlength=200 placeholder="Ej. sin azúcar, bien caliente, poco hielo">${esc(it.note||'')}</textarea></label><div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=snt>Guardar</button></div>`);
+    const ta=$('#nt');if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}return}
+  if(a==='snt'){const note=$('#nt').value.trim().slice(0,200)||null;
+    if(fail(await sb.from('order_items').update({note}).eq('id',S.d.nid)))return;closeM();return load()}
   if(a==='new'){S.d={oid:null,tn:'',l:{}};return dm()}
   if(a==='add'){S.d={oid:id,tn:S.orders.find(o=>o.id===id).table_name,l:{}};return dm()}
   if(a==='pl'||a==='mn'){const l=S.d.l[id]||(S.d.l[id]={q:0});l.q=Math.max(0,l.q+(a==='pl'?1:-1));return dm()}
@@ -614,7 +623,7 @@ addEventListener('beforeprint',()=>{if(shield())attempt()});
 // Actualización automática: al volver a la pestaña, recuperar internet o reabrir la página
 document.addEventListener('visibilitychange',resync);addEventListener('focus',resync);addEventListener('online',resync);addEventListener('pageshow',resync);
 // Actualización automática de la app: detecta una versión nueva publicada en GitHub y recarga sola
-const BUILD='2026-10-10-9';
+const BUILD='2026-10-10-10';
 let _vh=null;
 const hashS=s=>{let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return h+':'+s.length};
 async function doReload(){
