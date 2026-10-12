@@ -167,11 +167,15 @@ textarea:focus-visible{outline:3px solid #d9a066;outline-offset:1px}
 .rcp{border:1px solid var(--line);border-radius:12px;padding:.8rem;background:var(--foam);display:flex;flex-direction:column;gap:.35rem}
 .rr{display:flex;justify-content:space-between;align-items:center;gap:1rem;font-size:1.1rem}.rr b{font-size:1.25rem}
 .rr.cb{border-top:1px dashed var(--line);margin-top:.3rem;padding-top:.6rem;color:var(--ok)}.rr.cb b{font-size:1.9rem;font-weight:800;color:var(--ok)}
+.prv{display:none}
 /* Solo celular: la ventana se ajusta al área visible, por encima del teclado */
 @media(max-width:700px){
 .ov{inset:auto;left:0;right:0;top:var(--vvt,0px);height:var(--vvh,100%)}
 .sheet{max-height:calc(var(--vvh,100dvh)*.94)}
 .ov.pay .sheet{max-height:var(--vvh,100dvh);height:var(--vvh,100dvh)}
+.prv{display:block;flex:0 0 100%;margin:0 0 .2rem}
+.prv summary{min-height:40px;padding:.3rem .8rem}
+.prv .pdb{max-height:calc(var(--vvh,100dvh)*.3);overflow:auto}
 }
 </style></head><body><div id="app"></div><div id="modal"></div>
 <script>
@@ -208,7 +212,10 @@ const paidAmt=id=>r2(itemsOf(id).filter(i=>i.paid).reduce((a,i)=>a+i.qty*i.price
 const can=t=>(PERMS[S.u.role]||PERMS.mesero).includes(t);
 const fail=r=>{if(r&&r.error){document.body.classList.remove('busy');alert('Error: '+r.error.message);return true}};
 const wrap=(h,nw,c='')=>`<div class="ov ${nw?'nw':''} ${c}"><div class=sheet>${h}</div></div>`;
-function setM(h,c=''){const m=$('#modal'),o=m.querySelector('.sheet'),st=o?o.scrollTop:0;m.innerHTML=wrap(h,!o,c);if(o)m.querySelector('.sheet').scrollTop=st}
+// keep: actualiza el contenido sin recrear los elementos (el input conserva el foco y el teclado no se cierra)
+function setM(h,c='',keep){const m=$('#modal'),o=m.querySelector('.sheet'),st=o?o.scrollTop:0;
+  if(keep&&o){const t=document.createElement('div');t.innerHTML=wrap(h,false,c);morph(m,t);return}
+  m.innerHTML=wrap(h,!o,c);if(o)m.querySelector('.sheet').scrollTop=st}
 const closeM=()=>{stopCam();S.cam=null;$('#modal').innerHTML='';S.d=S.p=S.sel=null};
 
 // ---------- Datos ----------
@@ -370,10 +377,12 @@ const dtotal=()=>r2(Object.entries(S.d.l).reduce((a,[id,l])=>{const p=S.prods.fi
 function fp(v){S.pq=v;const q=norm(v.trim());let n=0;document.querySelectorAll('#ptab tr[data-n]').forEach(r=>{const h=!!q&&!r.dataset.n.includes(q);r.hidden=h;if(!h)n++});$('#pnr').hidden=n>0;$('#pc').textContent=q?`(${n} de ${S.prods.length})`:`(${S.prods.length})`}
 function fq(v){S.d.q=v;const q=norm(v.trim());let n=0;document.querySelectorAll('.prow').forEach(r=>{const h=!!q&&!r.dataset.n.includes(q);r.hidden=h;if(!h)n++});$('#nr').hidden=n>0}
 function dm(){const d=S.d;
+  const sel=S.prods.filter(p=>(d.l[p.id]&&d.l[p.id].q)>0),cnt=sel.reduce((a,p)=>a+d.l[p.id].q,0);
+  const prv=sel.length?`<details class="pd prv" ${d.prv?'open':''} ontoggle="if(S.d)S.d.prv=this.open"><summary>Ver selección · ${cnt} unidad${cnt>1?'es':''}</summary><div class=pdb>${sel.map(p=>{const l=d.l[p.id];return `<div class=pdr><span>${l.q} × ${esc(p.name)}${l.t?' · para llevar':''}</span><b>${money(r2(l.q*pr(p,l.t)))}</b></div>`}).join('')}</div></details>`:'';
   setM(`<h2>${d.oid?'Agregar a '+esc(d.tn):'Nuevo pedido'}</h2>${d.oid?'':`<input placeholder="Mesa o cliente" value="${esc(d.tn)}" oninput="S.d.tn=this.value">`}
   <div class=srch><input type=search id=sq placeholder="Buscar producto…" autocomplete=off enterkeyhint=search value="${esc(d.q||'')}" oninput="fq(this.value)"></div>
   ${S.prods.map(p=>{const l=d.l[p.id]||{q:0};return `<div class="prow ${l.q?'on':''}" data-n="${esc(norm(p.name+' '+p.category))}" ${!d.q||norm(p.name+' '+p.category).includes(norm(d.q.trim()))?'':'hidden'}><span>${esc(p.name)}<small>${money(pr(p,l.t))}${+p.take_extra&&!l.t?' · llevar '+money(pr(p,1)):''}</small></span><label class=tk><input type=checkbox data-act=tk data-id=${p.id} ${l.t?'checked':''}>llevar</label><button data-act=mn data-id=${p.id}>−</button><b>${l.q}</b><button data-act=pl data-id=${p.id}>+</button></div>`}).join('')||'<p class=empty>No hay productos. El administrador debe crearlos.</p>'}
-  <p class=empty id=nr hidden>Ningún producto coincide.</p><footer class=bar><b>${money(dtotal())}</b><button data-act=cm>Cancelar</button><button class=pri data-act=sd>Guardar pedido</button></footer>`);
+  <p class=empty id=nr hidden>Ningún producto coincide.</p><footer class=bar>${prv}<b>${money(dtotal())}</b><button data-act=cm>Cancelar</button><button class=pri data-act=sd>Guardar pedido</button></footer>`,'',!!$('#sq'));
 }
 async function saveDraft(){
   const d=S.d,rows=Object.entries(d.l).filter(([,l])=>l.q>0).map(([id,l])=>{const p=S.prods.find(x=>x.id==id);return{product_id:+id,name:p.name,price:pr(p,l.t),qty:l.q,take_away:!!l.t,delivered:false}});
@@ -597,6 +606,9 @@ async function onClick(e){
     const s=r.data.id;await Promise.all([sb.from('payments').update({shift_id:s}).is('shift_id',null),sb.from('expenses').update({shift_id:s}).is('shift_id',null),sb.from('openings').update({shift_id:s}).is('shift_id',null),sb.from('orders').update({shift_id:s}).in('id',S.orders.filter(done).map(o=>o.id)).is('shift_id',null)]);
     setM(`<h2>Jornada cerrada</h2>${sumBox(T)}<button class=pri data-act=cm>Listo</button>`);return load()}
 }
+// Celular: los botones +, − y "llevar" no quitan el foco del buscador, así el teclado no se cierra
+document.addEventListener('mousedown',e=>{
+  if(isMobile()&&e.target.closest('.prow button, .prow label'))e.preventDefault()});
 // Arrastrar y soltar
 document.addEventListener('dragstart',e=>{const c=e.target.closest('.chip');if(c)e.dataTransfer.setData('text',c.dataset.u)});
 document.addEventListener('dragover',e=>{if(e.target.closest('.box'))e.preventDefault()});
@@ -634,7 +646,7 @@ addEventListener('beforeprint',()=>{if(shield())attempt()});
 // Actualización automática: al volver a la pestaña, recuperar internet o reabrir la página
 document.addEventListener('visibilitychange',resync);addEventListener('focus',resync);addEventListener('online',resync);addEventListener('pageshow',resync);
 // Actualización automática de la app: detecta una versión nueva publicada en GitHub y recarga sola
-const BUILD='2026-10-10-11';
+const BUILD='2026-10-12-01';
 let _vh=null;
 const hashS=s=>{let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return h+':'+s.length};
 async function doReload(){
