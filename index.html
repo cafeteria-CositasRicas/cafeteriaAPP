@@ -167,15 +167,17 @@ textarea:focus-visible{outline:3px solid #d9a066;outline-offset:1px}
 .rcp{border:1px solid var(--line);border-radius:12px;padding:.8rem;background:var(--foam);display:flex;flex-direction:column;gap:.35rem}
 .rr{display:flex;justify-content:space-between;align-items:center;gap:1rem;font-size:1.1rem}.rr b{font-size:1.25rem}
 .rr.cb{border-top:1px dashed var(--line);margin-top:.3rem;padding-top:.6rem;color:var(--ok)}.rr.cb b{font-size:1.9rem;font-weight:800;color:var(--ok)}
-.prv{display:none}
+/* Ventana de nuevo pedido: botones Productos / Productos seleccionados */
+.dh{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+.dh h2{margin-right:auto}
+.dh .seg{flex:0 1 auto}
+.dh .seg button{flex:0 1 auto;padding:.4rem .75rem;min-height:38px;font-size:.92rem}
+.dh .seg button:disabled{opacity:.4;cursor:not-allowed}
 /* Solo celular: la ventana se ajusta al área visible, por encima del teclado */
 @media(max-width:700px){
 .ov{inset:auto;left:0;right:0;top:var(--vvt,0px);height:var(--vvh,100%)}
 .sheet{max-height:calc(var(--vvh,100dvh)*.94)}
 .ov.pay .sheet{max-height:var(--vvh,100dvh);height:var(--vvh,100dvh)}
-.prv{display:block;flex:0 0 100%;margin:0 0 .2rem}
-.prv summary{min-height:40px;padding:.3rem .8rem}
-.prv .pdb{max-height:calc(var(--vvh,100dvh)*.3);overflow:auto}
 }
 </style></head><body><div id="app"></div><div id="modal"></div>
 <script>
@@ -378,11 +380,21 @@ function fp(v){S.pq=v;const q=norm(v.trim());let n=0;document.querySelectorAll('
 function fq(v){S.d.q=v;const q=norm(v.trim());let n=0;document.querySelectorAll('.prow').forEach(r=>{const h=!!q&&!r.dataset.n.includes(q);r.hidden=h;if(!h)n++});$('#nr').hidden=n>0}
 function dm(){const d=S.d;
   const sel=S.prods.filter(p=>(d.l[p.id]&&d.l[p.id].q)>0),cnt=sel.reduce((a,p)=>a+d.l[p.id].q,0);
-  const prv=sel.length?`<details class="pd prv" ${d.prv?'open':''} ontoggle="if(S.d)S.d.prv=this.open"><summary>Ver selección · ${cnt} unidad${cnt>1?'es':''}</summary><div class=pdb>${sel.map(p=>{const l=d.l[p.id];return `<div class=pdr><span>${l.q} × ${esc(p.name)}${l.t?' · para llevar':''}</span><b>${money(r2(l.q*pr(p,l.t)))}</b></div>`}).join('')}</div></details>`:'';
-  setM(`<h2>${d.oid?'Agregar a '+esc(d.tn):'Nuevo pedido'}</h2>${d.oid?'':`<input placeholder="Mesa o cliente" value="${esc(d.tn)}" oninput="S.d.tn=this.value">`}
-  <div class=srch><input type=search id=sq placeholder="Buscar producto…" autocomplete=off enterkeyhint=search value="${esc(d.q||'')}" oninput="fq(this.value)"></div>
-  ${S.prods.map(p=>{const l=d.l[p.id]||{q:0};return `<div class="prow ${l.q?'on':''}" data-n="${esc(norm(p.name+' '+p.category))}" ${!d.q||norm(p.name+' '+p.category).includes(norm(d.q.trim()))?'':'hidden'}><span>${esc(p.name)}<small>${money(pr(p,l.t))}${+p.take_extra&&!l.t?' · llevar '+money(pr(p,1)):''}</small></span><label class=tk><input type=checkbox data-act=tk data-id=${p.id} ${l.t?'checked':''}>llevar</label><button data-act=mn data-id=${p.id}>−</button><b>${l.q}</b><button data-act=pl data-id=${p.id}>+</button></div>`}).join('')||'<p class=empty>No hay productos. El administrador debe crearlos.</p>'}
-  <p class=empty id=nr hidden>Ningún producto coincide.</p><footer class=bar>${prv}<b>${money(dtotal())}</b><button data-act=cm>Cancelar</button><button class=pri data-act=sd>Guardar pedido</button></footer>`,'',!!$('#sq'));
+  if(!sel.length)d.v='p';            // sin selección: siempre vuelve a Productos
+  const v=d.v==='s'?'s':'p';
+  const row=(p,sv)=>{const l=d.l[p.id]||{q:0};
+    const hid=!sv&&d.q&&!norm(p.name+' '+p.category).includes(norm(d.q.trim()));
+    const sm=sv?`${l.q} × ${money(pr(p,l.t))} = ${money(r2(l.q*pr(p,l.t)))}`:`${money(pr(p,l.t))}${+p.take_extra&&!l.t?' · llevar '+money(pr(p,1)):''}`;
+    return `<div class="prow ${l.q?'on':''}" data-n="${esc(norm(p.name+' '+p.category))}" ${hid?'hidden':''}><span>${esc(p.name)}<small>${sm}</small></span><label class=tk><input type=checkbox data-act=tk data-id=${p.id} ${l.t?'checked':''}>llevar</label><button data-act=mn data-id=${p.id}>−</button><b>${l.q}</b><button data-act=pl data-id=${p.id}>+</button></div>`};
+  const tabs=`<div class=seg><button class="${v==='p'?'on':''}" data-act=dv data-v=p>Productos</button><button class="${v==='s'?'on':''}" data-act=dv data-v=s ${sel.length?'':'disabled'}>Productos seleccionados${cnt?` (${cnt})`:''}</button></div>`;
+  const body=v==='s'
+    ? sel.map(p=>row(p,true)).join('')
+    : `<div class=srch><input type=search id=sq placeholder="Buscar producto…" autocomplete=off enterkeyhint=search value="${esc(d.q||'')}" oninput="fq(this.value)"></div>
+       ${S.prods.map(p=>row(p,false)).join('')||'<p class=empty>No hay productos. El administrador debe crearlos.</p>'}
+       <p class=empty id=nr hidden>Ningún producto coincide.</p>`;
+  setM(`<div class=dh><h2>${d.oid?'Agregar a '+esc(d.tn):'Nuevo pedido'}</h2>${tabs}</div>${d.oid?'':`<input placeholder="Mesa o cliente" value="${esc(d.tn)}" oninput="S.d.tn=this.value">`}
+  ${body}
+  <footer class=bar><b>${money(dtotal())}</b><button data-act=cm>Cancelar</button><button class=pri data-act=sd>Guardar pedido</button></footer>`,'',!!$('#sq')&&v==='p');
 }
 async function saveDraft(){
   const d=S.d,rows=Object.entries(d.l).filter(([,l])=>l.q>0).map(([id,l])=>{const p=S.prods.find(x=>x.id==id);return{product_id:+id,name:p.name,price:pr(p,l.t),qty:l.q,take_away:!!l.t,delivered:false}});
@@ -521,6 +533,7 @@ async function onClick(e){
   if(a==='add'){S.d={oid:id,tn:S.orders.find(o=>o.id===id).table_name,l:{}};return dm()}
   if(a==='pl'||a==='mn'){const l=S.d.l[id]||(S.d.l[id]={q:0});l.q=Math.max(0,l.q+(a==='pl'?1:-1));return dm()}
   if(a==='tk'){(S.d.l[id]||(S.d.l[id]={q:0})).t=t.checked;return dm()}
+  if(a==='dv'){S.d.v=D.v;return dm()}
   if(a==='sd')return saveDraft();
   if(a==='pay'){const ids=itemsOf(id).filter(i=>!i.paid).map(i=>i.id);if(!ids.length)return alert('Este pedido ya está cobrado.');const its=itemsOf(id),tk=its.filter(i=>i.take_away);S.p={oid:id,ids,ask:tk.length>0&&tk.length<its.length&&tk.every(i=>i.delivered)&&tk.some(i=>!i.handed),ok:false,mode:null,n:0,a:[],mt:[],rc:[]};return pm()}
   if(a==='pmode'){const u=units(S.p.oid);S.p.mode=D.v;if(D.v==='single'){S.p.n=1;S.p.a=u.map(()=>0);S.p.mt=['efectivo']}else{S.p.a=u.map(()=>-1)}
@@ -646,7 +659,7 @@ addEventListener('beforeprint',()=>{if(shield())attempt()});
 // Actualización automática: al volver a la pestaña, recuperar internet o reabrir la página
 document.addEventListener('visibilitychange',resync);addEventListener('focus',resync);addEventListener('online',resync);addEventListener('pageshow',resync);
 // Actualización automática de la app: detecta una versión nueva publicada en GitHub y recarga sola
-const BUILD='2026-10-12-01';
+const BUILD='2026-10-12-02';
 let _vh=null;
 const hashS=s=>{let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return h+':'+s.length};
 async function doReload(){
