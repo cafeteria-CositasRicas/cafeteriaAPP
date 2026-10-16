@@ -238,6 +238,10 @@ async function load(q){
   if(q&&sig===S.sig)return;S.sig=sig;
   S.orders=o.data.map(({order_items,...x})=>x);S.items=o.data.flatMap(x=>x.order_items||[]);
   S.prods=p.data||[];S.pays=pa.data||[];S.exps=e.data||[];S.opens=op.data||[];S.staff=Object.fromEntries((st.data||[]).map(x=>[x.id,x]));
+
+    // Si otro dispositivo ya cobró (o cambió) este pedido, se cierra la ventana de pago que quedó abierta aquí
+  if(S.p&&!S.sv&&!S.cam&&!(S.p.st&&(S.p.st.ins||S.p.st.claimed))&&S.p.ids.some(id=>{const it=S.items.find(x=>x.id===id);return !it||it.paid})){
+    closeM();setTimeout(()=>alert('Este pedido fue cobrado o modificado desde otro dispositivo. La ventana de pago se cerró para evitar un cobro doble.'),50)}
   render();
 }
 const msgFor=a=>a==='blocked'?'Tu acceso fue bloqueado por el administrador.':a==='deleted'?'No se encontró el perfil del usuario.':String(a).startsWith('schedule')?`Fuera de horario. Tu acceso al sistema es de ${a.split(' ')[1].replace('-',' a ')}. La jornada se cierra automáticamente al terminar el horario.`:'Acceso no permitido.';
@@ -439,14 +443,28 @@ async function savePay(){
 }
 // Guarda el pago en la base de datos (se puede reintentar sin duplicar pagos)
 async function commitPay(st){const p=S.p;
-  if(!st.ins){const r=await sb.from('payments').insert(st.rows).select('id,person,method,amount');if(fail(r))return false;st.ins=r.data||[]}
+  if(!st.claimed&&!st.ins){
+    const c=await sb.from('order_items').update({paid:true}).in('id',p.ids).eq('paid',false).select('id');
+    if(fail(c))return false;
+    const got=(c.data||[]).map(x=>x.id);
+    if(got.length!==p.ids.length){
+      if(got.length)await sb.from('order_items').update({paid:false}).in('id',got);
+      closeM();load();
+      setTimeout(()=>alert('Este pedido ya fue cobrado o modificado desde otro dispositivo. No se guardó este pago para evitar un cobro doble. Revisa el pedido antes de cobrar de nuevo.'),50);
+      return false}
+    st.claimed=true}
+  if(!st.ins){
+    const r=await sb.from('payments').insert(st.rows).select('id,person,method,amount');
+    if(r.error){const u=await sb.from('order_items').update({paid:false}).in('id',p.ids);if(!u.error)st.claimed=false;fail(r);return false}
+    st.ins=r.data||[]}
   if(!st.s2){
     if(p.ok){const hid=itemsOf(p.oid).filter(i=>i.take_away&&!i.handed).map(i=>i.id);if(hid.length&&fail(await sb.from('order_items').update({delivered:true,handed:true}).in('id',hid)))return false}
-    if(fail(await sb.from('order_items').update({paid:true}).in('id',p.ids)))return false;
     const rem=await sb.from('order_items').select('id',{count:'exact',head:true}).eq('order_id',p.oid).eq('paid',false);
     if(fail(await sb.from('orders').update({paid:rem.count===0,paid_at:new Date().toISOString()}).eq('id',p.oid)))return false;
     st.s2=true}
   return true}
+  
+  
 // Guarda el pago y sube las fotos de los comprobantes
 async function finishCam(){const c=S.cam;
   if(!await commitPay(c))return;
