@@ -172,6 +172,8 @@ textarea:focus-visible{outline:3px solid #d9a066;outline-offset:1px}
 .dh .seg{flex:0 1 auto}
 .dh .seg button{flex:0 1 auto;padding:.4rem .75rem;min-height:38px;font-size:.92rem}
 .dh .seg button:disabled{opacity:.4;cursor:not-allowed}
+/* Solo computador: el recuadro "Sin asignar" no se encoge y los nombres no se encima */
+@media(min-width:701px){.sheet>*{flex-shrink:0}.box{flex-shrink:0}}
 /* Solo celular: la ventana se ajusta al área visible, por encima del teclado */
 @media(max-width:700px){
 .ov{inset:auto;left:0;right:0;top:var(--vvt,0px);height:var(--vvh,100%)}
@@ -184,9 +186,9 @@ textarea:focus-visible{outline:3px solid #d9a066;outline-offset:1px}
 const SUPABASE_URL='https://egkspfelnrsumpzfdlbs.supabase.co', SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVna3NwZmVsbnJzdW1wemZkbGJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5NTc0NTYsImV4cCI6MjEwNjUzMzQ1Nn0.PHJZPk-E981l9RAg516_avPRqLKaK6btfQ796sadJRo';
 const DOM='@cafeteria.app'; // los usuarios se crean como usuario@cafeteria.app
 // ===== Niveles: para agregar uno nuevo, añade una línea con las pestañas que puede ver =====
-const PERMS={admin:['pedidos','resumen','pagados','caja','historial','productos','usuarios'],mesero:['pedidos','resumen','pagados','caja']};
+const PERMS={admin:['pedidos','encargos','resumen','pagados','caja','historial','productos','usuarios'],mesero:['pedidos','encargos','resumen','pagados','caja']};
 const PROTEGIDOS=['mesero']; // niveles con protección anti-captura
-const TABS={pedidos:'En cola',resumen:'Por servir',pagados:'Pagados',caja:'Caja',productos:'Productos',usuarios:'Usuarios',historial:'Historial',perfil:'Mi perfil'};
+const TABS={pedidos:'En cola',encargos:'Encargados',resumen:'Por servir',pagados:'Pagados',caja:'Caja',productos:'Productos',usuarios:'Usuarios',historial:'Historial',perfil:'Mi perfil'};
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 let _sb2;const getSb2=()=>_sb2||(_sb2=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:'tmp-admin'}}));
 const FINE=matchMedia('(pointer:fine)').matches;
@@ -209,6 +211,14 @@ const total=id=>r2(itemsOf(id).reduce((a,i)=>a+i.qty*i.price,0));
 const status=o=>{const it=itemsOf(o.id);if(!it.every(i=>i.delivered))return 'pendiente';return it.some(i=>i.take_away&&!i.handed)?'listo':'entregado'};
 const isPaid=o=>{const it=itemsOf(o.id);return it.length>0&&it.every(i=>i.paid)};
 const done=o=>isPaid(o)&&status(o)==='entregado';
+// Pedidos encargados: un pedido con fecha futura (scheduled_for) vive en "Encargados"; al llegar la hora pasa solo a "En cola"
+const isSched=o=>!!o.scheduled_for&&new Date(o.scheduled_for).getTime()>Date.now();
+const effT=o=>new Date(o.scheduled_for||o.created_at).getTime();
+const schedKey=()=>S.orders.filter(isSched).map(o=>o.id).join(',');
+let _sch='';
+const fmtS=d=>new Date(d).toLocaleString('es',{weekday:'short',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+const toLocalInput=d=>{const x=new Date(d.getTime()-d.getTimezoneOffset()*60000);return x.toISOString().slice(0,16)};
+const defSched=()=>{const d=new Date(Date.now()+864e5);d.setMinutes(d.getMinutes()<30?30:60,0,0);return toLocalInput(d)};
 const paidAmt=id=>r2(itemsOf(id).filter(i=>i.paid).reduce((a,i)=>a+i.qty*i.price,0));
 const can=t=>(PERMS[S.u.role]||PERMS.mesero).includes(t);
 const fail=r=>{if(r&&r.error){document.body.classList.remove('busy');alert('Error: '+r.error.message);return true}};
@@ -305,10 +315,10 @@ function login(msg=''){
 }
 
 // ---------- Vistas ----------
-function card(o){const it=itemsOf(o.id),st=status(o);
-  return `<article class=card><header><b>${esc(o.table_name)}</b><span class=tags><span class="tag ${st}">${st==='listo'?'listo para retirar':st}</span>${isPaid(o)?'<span class="tag cobrado">cobrado</span>':paidAmt(o.id)>0?'<span class="tag parcial">cobro parcial</span>':''}</span></header><ul>
-  ${it.map(i=>`<li class="${i.delivered?'done':''}"><label><input type=checkbox data-act=tg data-id=${i.id} ${i.delivered?'checked':''}> <span>${esc(i.name)} <em>${i.take_away?'para llevar':'para servir'}${i.paid?' · cobrado':''}</em></span></label><div class=qt><button data-act=iq data-id=${i.id} data-d=-1 ${i.qty<2?'disabled':''} aria-label="Menos">−</button><b>${i.qty}</b><button data-act=iq data-id=${i.id} data-d=1 aria-label="Más">+</button></div><button class=ed data-act=en data-id=${i.id} aria-label="Editar comentario">✎</button><button class=x data-act=di data-id=${i.id} aria-label="Quitar">✕</button>${i.note?`<div class=nt>✎ ${esc(i.note)}</div>`:''}<div class=sub>${i.qty} × ${money(i.price)} = <b>${money(i.qty*i.price)}</b></div></li>`).join('')}</ul>
-  <footer><b>${money(total(o.id))}</b>${st==='listo'&&isPaid(o)?`<button class=hnd data-act=hand data-id=${o.id}>Entregar</button>`:''}<button data-act=add data-id=${o.id}>Agregar</button>${isPaid(o)?'':`<button class=pri data-act=pay data-id=${o.id}>${paidAmt(o.id)>0?'Cobrar saldo':'Pagar'}</button>`}<button class=x data-act=do data-id=${o.id}>Eliminar</button></footer></article>`}
+function card(o,sch){const it=itemsOf(o.id),st=status(o);
+  return `<article class=card><header><b>${esc(o.table_name)}</b><span class=tags>${sch?`<span class="tag listo">📅 ${esc(fmtS(o.scheduled_for))}</span>`:`<span class="tag ${st}">${st==='listo'?'listo para retirar':st}</span>`}${isPaid(o)?'<span class="tag cobrado">cobrado</span>':paidAmt(o.id)>0?'<span class="tag parcial">cobro parcial</span>':''}</span></header><ul>
+  ${it.map(i=>`<li class="${i.delivered?'done':''}"><label>${sch?'':`<input type=checkbox data-act=tg data-id=${i.id} ${i.delivered?'checked':''}>`} <span>${esc(i.name)} <em>${i.take_away?'para llevar':'para servir'}${i.paid?' · cobrado':''}</em></span></label><div class=qt><button data-act=iq data-id=${i.id} data-d=-1 ${i.qty<2?'disabled':''} aria-label="Menos">−</button><b>${i.qty}</b><button data-act=iq data-id=${i.id} data-d=1 aria-label="Más">+</button></div><button class=ed data-act=en data-id=${i.id} aria-label="Editar comentario">✎</button><button class=x data-act=di data-id=${i.id} aria-label="Quitar">✕</button>${i.note?`<div class=nt>✎ ${esc(i.note)}</div>`:''}<div class=sub>${i.qty} × ${money(i.price)} = <b>${money(i.qty*i.price)}</b></div></li>`).join('')}</ul>
+  <footer><b>${money(total(o.id))}</b>${st==='listo'&&isPaid(o)?`<button class=hnd data-act=hand data-id=${o.id}>Entregar</button>`:''}<button data-act=add data-id=${o.id}>Agregar</button>${sch?`<button data-act=esd data-id=${o.id}>Fecha</button>`:''}${isPaid(o)?'':`<button class=pri data-act=pay data-id=${o.id}>${paidAmt(o.id)>0?'Cobrar saldo':'Pagar'}</button>`}<button class=x data-act=do data-id=${o.id}>Eliminar</button></footer></article>`}
 const cashInfo=id=>{const all=S.pays.filter(p=>p.order_id===id),split=all.length>1,c=split?all:all.filter(p=>p.method==='efectivo');
   if(!c.length)return '';
   const row=(k,v,cl='')=>`<div class="pdr ${cl}"><span>${k}</span><b>${v}</b></div>`;
@@ -321,8 +331,10 @@ const openCard=()=>{const op=S.opens||[],tot=op.reduce((a,x)=>a+ +x.amount,0),ad
   return `<section class="sv s"><h3>Caja inicial <span class="tag cobrado">${money(tot)}</span></h3><p style="margin:0 0 .6rem;color:var(--mut)">Dinero que había en caja al iniciar la jornada. Va aparte de las ventas.</p>${op.length?`<div class=scroll><table>${op.map(x=>`<tr><td>${esc(x.note||'Caja inicial')}<small style="display:block;color:var(--mut)">${esc(uname(x.created_by))} · ${fmt(x.created_at)}</small></td><td class=n>${money(x.amount)}</td>${adm?`<td class=n><button data-act=eo data-id=${x.id}>Editar</button> <button class=x data-act=dop data-id=${x.id}>Eliminar</button></td>`:''}</tr>`).join('')}</table></div>`:'<p class=empty style="padding:.4rem 0">Aún no se ha registrado la caja inicial de esta jornada.</p>'}</section>`};
 function view(){
   const t=S.tab;
-  if(t==='pedidos'){const l=S.orders.filter(o=>!done(o)),nl=l.filter(o=>status(o)==='listo').length;return `<div class=bar><b>${l.length} pedido(s) en cola${nl?` · ${nl} listo(s) para retirar`:''}</b><button class=pri data-act=new>+ Nuevo pedido</button></div>${l.length?`<div class=grid>${l.map(card).join('')}</div>`:'<p class=empty>No hay pedidos en cola. Crea uno con “Nuevo pedido”.</p>'}`}
-  if(t==='resumen'){const sv={},ll={};S.items.filter(i=>!i.delivered).forEach(i=>{const m=i.take_away?ll:sv;m[i.name]=(m[i.name]||0)+i.qty});
+  if(t==='pedidos'){const l=S.orders.filter(o=>!done(o)&&!isSched(o)).sort((a,b)=>effT(a)-effT(b)),nl=l.filter(o=>status(o)==='listo').length;return `<div class=bar><b>${l.length} pedido(s) en cola${nl?` · ${nl} listo(s) para retirar`:''}</b><button data-act=newsch>📅 Pedido encargado</button><button class=pri data-act=new>+ Nuevo pedido</button></div>${l.length?`<div class=grid>${l.map(o=>card(o)).join('')}</div>`:'<p class=empty>No hay pedidos en cola. Crea uno con “Nuevo pedido”.</p>'}`}
+  if(t==='encargos'){const l=S.orders.filter(isSched).sort((a,b)=>new Date(a.scheduled_for)-new Date(b.scheduled_for));
+    return `<div class=bar><b>${l.length} pedido(s) encargado(s)</b><button class=pri data-act=newsch>+ Pedido encargado</button></div>${l.length?`<div class=grid>${l.map(o=>card(o,true)).join('')}</div>`:'<p class=empty>No hay pedidos encargados. Crea uno con “Pedido encargado”; pasará solo a “En cola” a la fecha y hora indicadas.</p>'}`}
+  if(t==='resumen'){const sv={},ll={},sc=new Set(S.orders.filter(isSched).map(o=>o.id));S.items.filter(i=>!i.delivered&&!sc.has(i.order_id)).forEach(i=>{const m=i.take_away?ll:sv;m[i.name]=(m[i.name]||0)+i.qty});
     const sec=(title,cls,m)=>{const k=Object.keys(m).sort(),tot=k.reduce((a,n)=>a+m[n],0);
       return `<section class="sv ${cls}"><h3>${title} <span class="tag ${cls==='s'?'cobrado':'listo'}">${tot}</span></h3>${k.length?`<div class=scroll><table><tr><th>Producto</th><th class=n>Cantidad</th></tr>${k.map(n=>`<tr><td>${esc(n)}</td><td class=n><b>${m[n]}</b></td></tr>`).join('')}</table></div>`:'<p class=empty style="padding:.8rem 0">Nada pendiente.</p>'}</section>`};
     return `<div class=bar><b>Pendiente por entregar, sumando todos los pedidos</b></div>${sec('Para servir · primero','s',sv)}${sec('Para llevar · después','l',ll)}`}
@@ -363,11 +375,11 @@ function patch(html){const app=$('#app');
   if(S.anim||!app.querySelector('main')||!app.querySelector('nav')){app.innerHTML=html;return}
   const t=document.createElement('div');t.innerHTML=html;morph(app,t)}
 function render(){
-  document.body.classList.remove('busy');if(S.u&&S.u.role)applyShield();const y=scrollY,nl=$('nav')?.scrollLeft||0,ae=document.activeElement,aid=ae&&ae.id,ss=ae&&ae.selectionStart,ls=[...document.querySelectorAll('.lim')].map(e=>e.scrollTop);
+  _sch=schedKey();document.body.classList.remove('busy');if(S.u&&S.u.role)applyShield();const y=scrollY,nl=$('nav')?.scrollLeft||0,ae=document.activeElement,aid=ae&&ae.id,ss=ae&&ae.selectionStart,ls=[...document.querySelectorAll('.lim')].map(e=>e.scrollTop);
   if(!S.u)return;
   const tabs=[...(PERMS[S.u.role]||PERMS.mesero),'perfil']; if(!tabs.includes(S.tab))S.tab=tabs[0];
   const html=`<header class=top><h1>Cafetería</h1><span><small>${esc(S.u.username)} · ${esc(S.u.role)}</small> <button class=out data-act=out aria-label="Cerrar sesión"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>Cerrar sesión</button></span></header>
-  <nav>${tabs.map(t=>`<button class="${t===S.tab?'on':''}" data-act=tab data-t=${t}>${TABS[t]}</button>`).join('')}</nav><main class="${S.anim?'in':''}">${view()}</main>`;
+  <nav>${tabs.map(t=>`<button class="${t===S.tab?'on':''}" data-act=tab data-t=${t}>${TABS[t]}${t==='encargos'&&S.orders.some(isSched)?` (${S.orders.filter(isSched).length})`:''}</button>`).join('')}</nav><main class="${S.anim?'in':''}">${view()}</main>`;
   patch(html);
   scrollTo(0,S.anim?0:y);if($('nav'))$('nav').scrollLeft=nl;S.anim=false;
   document.querySelectorAll('.lim').forEach((e,i)=>{e.scrollTop=ls[i]||0});
@@ -394,7 +406,7 @@ function dm(){const d=S.d;
     : `<div class=srch><input type=search id=sq placeholder="Buscar producto…" autocomplete=off enterkeyhint=search value="${esc(d.q||'')}" oninput="fq(this.value)"></div>
        ${S.prods.map(p=>row(p,false)).join('')||'<p class=empty>No hay productos. El administrador debe crearlos.</p>'}
        <p class=empty id=nr hidden>Ningún producto coincide.</p>`;
-  setM(`<div class=dh><h2>${d.oid?'Agregar a '+esc(d.tn):'Nuevo pedido'}</h2>${tabs}</div>${d.oid?'':`<input placeholder="Mesa o cliente" value="${esc(d.tn)}" oninput="S.d.tn=this.value">`}
+  setM(`<div class=dh><h2>${d.oid?'Agregar a '+esc(d.tn):(d.sch?'Pedido encargado':'Nuevo pedido')}</h2>${tabs}</div>${d.oid?'':`<input placeholder="Mesa o cliente" value="${esc(d.tn)}" oninput="S.d.tn=this.value">`}${d.sch&&!d.oid?`<label>Fecha y hora del pedido<input type=datetime-local id=sdt value="${esc(d.dt||'')}" oninput="S.d.dt=this.value" onchange="S.d.dt=this.value"></label>`:''}
   ${body}
   <footer class=bar><b>${money(dtotal())}</b><button data-act=cm>Cancelar</button><button class=pri data-act=sd>Guardar pedido</button></footer>`,'',!!$('#sq')&&v==='p');
 }
@@ -403,9 +415,12 @@ async function saveDraft(){
   if(!rows.length)return alert('Agrega al menos un producto.');
   let oid=d.oid;
   if(!oid){if(!d.tn.trim())return alert('Escribe la mesa o el cliente.');
-    const r=await sb.from('orders').insert({table_name:d.tn.trim()}).select().single();if(fail(r))return;oid=r.data.id}
+    let sf=null;
+    if(d.sch){const t=new Date(d.dt);if(!d.dt||isNaN(t.getTime()))return alert('Elige la fecha y la hora del pedido.');if(t.getTime()<=Date.now()+60000)return alert('La fecha y la hora deben ser futuras.');sf=t.toISOString()}
+    const r=await sb.from('orders').insert(sf?{table_name:d.tn.trim(),scheduled_for:sf}:{table_name:d.tn.trim()}).select().single();if(fail(r))return;oid=r.data.id}
   if(fail(await sb.from('order_items').insert(rows.map(r=>({...r,order_id:oid})))))return;
   if(d.oid&&S.orders.find(o=>o.id===oid)?.paid)await sb.from('orders').update({paid:false}).eq('id',oid);
+  if(d.sch&&!d.oid){S.tab='encargos';S.anim=true}
   closeM();load();
 }
 
@@ -514,7 +529,7 @@ async function startCam(){const c=S.cam;
 
 // ---------- Eventos ----------
 function assign(i,k){S.p.a[i]=k;S.sel=null;pm()}
-const MUT=['sd','sp','se','spr','close','su','spf','see','sao','seo','svp','skip','snt'];
+const MUT=['sd','sp','se','spr','close','su','spf','see','sao','seo','svp','skip','snt','ssd','snow'];
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');
   if(t&&MUT.includes(t.dataset.act)){if(S.sv)return;S.sv=true;const h=t.innerHTML;t.disabled=true;t.innerHTML='<span class=sp></span>Guardando…';
     return onClick(e).finally(()=>{S.sv=false;if(t.isConnected){t.disabled=false;t.innerHTML=h}})}
@@ -549,6 +564,15 @@ async function onClick(e){
   if(a==='snt'){const note=$('#nt').value.trim().slice(0,200)||null;
     if(fail(await sb.from('order_items').update({note}).eq('id',S.d.nid)))return;closeM();return load()}
   if(a==='new'){S.d={oid:null,tn:'',l:{}};return dm()}
+  if(a==='newsch'){S.d={oid:null,tn:'',l:{},sch:true,dt:defSched()};return dm()}
+  if(a==='esd'){const o=S.orders.find(x=>x.id===id);if(!o)return;S.d={sid:id,dt:toLocalInput(new Date(o.scheduled_for))};
+    setM(`<h2>Fecha y hora · ${esc(o.table_name)}</h2><label>Fecha y hora del pedido<input type=datetime-local id=sdt value="${esc(S.d.dt)}" oninput="S.d.dt=this.value" onchange="S.d.dt=this.value"></label><p style="margin:0;color:var(--mut)">Al llegar esa fecha y hora, el pedido pasa solo a “En cola”.</p><div class=bar><button data-act=cm>Cancelar</button><button data-act=snow>Pasar a la cola ahora</button><button class=pri data-act=ssd>Guardar</button></div>`);return}
+  if(a==='ssd'){const sid=S.d&&S.d.sid,t=new Date(S.d&&S.d.dt);if(!sid)return;
+    if(!S.d.dt||isNaN(t.getTime()))return alert('Elige la fecha y la hora del pedido.');
+    if(t.getTime()<=Date.now()+60000)return alert('La fecha y la hora deben ser futuras. Para enviarlo ya a la cola usa “Pasar a la cola ahora”.');
+    if(fail(await sb.from('orders').update({scheduled_for:t.toISOString()}).eq('id',sid)))return;closeM();return load()}
+  if(a==='snow'){const sid=S.d&&S.d.sid;if(!sid)return;
+    if(fail(await sb.from('orders').update({scheduled_for:new Date().toISOString()}).eq('id',sid)))return;closeM();return load()}
   if(a==='add'){S.d={oid:id,tn:S.orders.find(o=>o.id===id).table_name,l:{}};return dm()}
   if(a==='pl'||a==='mn'){const l=S.d.l[id]||(S.d.l[id]={q:0});l.q=Math.max(0,l.q+(a==='pl'?1:-1));return dm()}
   if(a==='tk'){(S.d.l[id]||(S.d.l[id]={q:0})).t=t.checked;return dm()}
@@ -632,7 +656,7 @@ async function onClick(e){
     if(fail(await sb.from('openings').update({amount,note:$('#on').value.trim()||null}).eq('id',S.d.oid2)))return;closeM();return load()}
   if(a==='se'){const amount=r2(num($('#ea').value)),detail=$('#ed').value.trim();if(!(amount>0)||!detail)return alert('Escribe el monto y el detalle.');
     if(fail(await sb.from('expenses').insert({amount,detail})))return;closeM();return load()}
-  if(a==='end'){const open=S.orders.filter(o=>!done(o)).length;
+  if(a==='end'){const open=S.orders.filter(o=>!done(o)&&!isSched(o)).length;
     setM(`<h2>Terminar jornada</h2>${open?`<p class=err>Hay ${open} pedido(s) sin terminar (por cobrar o por entregar); seguirán en la cola de la siguiente jornada.</p>`:''}${sumBox(cajaTot())}<div class=bar><button data-act=cm>Cancelar</button><button class=pri data-act=close>Cerrar jornada</button></div>`);return}
   if(a==='close'){const T=cajaTot(),r=await sb.from('shifts').insert({closed_by:S.u.id,total_cash:T.cash,total_transfer:T.tr,total_expenses:T.ex,opening_cash:T.open}).select().single();if(fail(r))return;
     const s=r.data.id;await Promise.all([sb.from('payments').update({shift_id:s}).is('shift_id',null),sb.from('expenses').update({shift_id:s}).is('shift_id',null),sb.from('openings').update({shift_id:s}).is('shift_id',null),sb.from('orders').update({shift_id:s}).in('id',S.orders.filter(done).map(o=>o.id)).is('shift_id',null)]);
@@ -678,7 +702,7 @@ addEventListener('beforeprint',()=>{if(shield())attempt()});
 // Actualización automática: al volver a la pestaña, recuperar internet o reabrir la página
 document.addEventListener('visibilitychange',resync);addEventListener('focus',resync);addEventListener('online',resync);addEventListener('pageshow',resync);
 // Actualización automática de la app: detecta una versión nueva publicada en GitHub y recarga sola
-const BUILD='2026-10-12-04';
+const BUILD='2026-10-12-05';
 let _vh=null;
 const hashS=s=>{let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return h+':'+s.length};
 async function doReload(){
@@ -697,5 +721,6 @@ async function checkVersion(){
 setTimeout(checkVersion,4000);setInterval(checkVersion,60000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkVersion()});
 addEventListener('online',checkVersion);addEventListener('pageshow',checkVersion);
+setInterval(()=>{if(S.u&&schedKey()!==_sch)render()},10000); // cuando llega la hora de un encargo, pasa solo a En cola
 start();
 </script></body></html>
