@@ -167,7 +167,6 @@ textarea:focus-visible{outline:3px solid #d9a066;outline-offset:1px}
 .rcp{border:1px solid var(--line);border-radius:12px;padding:.8rem;background:var(--foam);display:flex;flex-direction:column;gap:.35rem}
 .rr{display:flex;justify-content:space-between;align-items:center;gap:1rem;font-size:1.1rem}.rr b{font-size:1.25rem}
 .rr.cb{border-top:1px dashed var(--line);margin-top:.3rem;padding-top:.6rem;color:var(--ok)}.rr.cb b{font-size:1.9rem;font-weight:800;color:var(--ok)}
-/* Ventana de nuevo pedido: botones Productos / Productos seleccionados */
 .dh{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
 .dh h2{margin-right:auto}
 .dh .seg{flex:0 1 auto}
@@ -238,8 +237,7 @@ async function load(q){
   if(q&&sig===S.sig)return;S.sig=sig;
   S.orders=o.data.map(({order_items,...x})=>x);S.items=o.data.flatMap(x=>x.order_items||[]);
   S.prods=p.data||[];S.pays=pa.data||[];S.exps=e.data||[];S.opens=op.data||[];S.staff=Object.fromEntries((st.data||[]).map(x=>[x.id,x]));
-
-    // Si otro dispositivo ya cobró (o cambió) este pedido, se cierra la ventana de pago que quedó abierta aquí
+  // Si otro dispositivo ya cobró (o cambió) este pedido, se cierra la ventana de pago que quedó abierta aquí
   if(S.p&&!S.sv&&!S.cam&&!(S.p.st&&(S.p.st.ins||S.p.st.claimed))&&S.p.ids.some(id=>{const it=S.items.find(x=>x.id===id);return !it||it.paid})){
     closeM();setTimeout(()=>alert('Este pedido fue cobrado o modificado desde otro dispositivo. La ventana de pago se cerró para evitar un cobro doble.'),50)}
   render();
@@ -339,7 +337,7 @@ function view(){
     return `<div class=ord><button class=hrow data-act=ho data-id=${o.id}><span>${oo?'▾':'▸'}</span><span><b>Pedido #${o.id}</b> · ${esc(uname(o.created_by))}<small>${fmtY(o.created_at)}</small></span><b>${money(paid)}</b></button>
     ${oo?`<div class=det><small>Mesa o cliente: <b>${esc(o.table_name)}</b></small><ul>${it.map(i=>`<li><span>${esc(i.name)} <em>${i.take_away?'para llevar':'para servir'}</em></span><div class=sub>${i.qty} × ${money(i.price)} = <b>${money(i.qty*i.price)}</b></div></li>`).join('')}</ul><p class=ttl>Total <b>${money(tot)}</b></p>${pays.map(p=>`<small>${pays.length>1?'Persona '+p.person+' · ':''}${p.method} ${money(p.amount)}${+p.change_given>0?' · cambio '+money(p.change_given):''}</small>`).join('<br>')}${S.u.role==='admin'&&pays.some(p=>p.method==='transferencia')?`<div class=bar style="margin:.6rem 0 0"><button data-act=vp data-id=${o.id}>Ver comprobante</button></div>`:''}</div>`:''}</div>`}).join('')}`:'<p class=empty>Cargando…</p>'):''}</section>`}).join(''):'<p class=empty>Aún no hay jornadas cerradas.</p>'}`}
   if(t==='perfil'){const u=S.u,f=S.staff[u.id]||{},row=(k,v)=>`<tr><th>${k}</th><td>${esc(v||'—')}</td></tr>`;
-    return `<div class=bar><b>Mi perfil</b><button class=pri data-act=pf data-uid=${u.id}>Editar mis datos</button></div>${f.full_name?'':'<p>Completa tus datos con “Editar mis datos”.</p>'}<div class=scroll><table>${row('Usuario',u.username)}${row('Nivel',u.role)}${row('Nombre completo',f.full_name)}${row('Cédula',f.id_number)}${row('Teléfono',f.phone)}${row('Correo de contacto',f.contact_email)}${row('Dirección',f.address)}</table></div>`}
+    return `<div class=bar><b>Mi perfil</b><button class=pri data-act=pf data-uid=${u.id}>Editar mis datos</button></div>${f.full_name?'':'<p>Completa tus datos con “Editar mis datos”.</p>'}<div class=scroll><table>${row('Usuario',u.username)}${row('Nivel',u.role)}${row('Nombre completo',f.full_name)}${row('Cédula',f.id_number)}${row('Teléfono',f.phone)}${row('Correo de contacto',f.contact_email)}${row('Dirección',f.address)}${row('Versión de la app',BUILD)}</table></div>`}
   if(t==='usuarios'){const now=Date.now(),on=l=>l&&!l.ended_at&&now-new Date(l.last_seen)<75000,d=l=>!l?'—':dur((on(l)?now:new Date(l.ended_at||l.last_seen))-new Date(l.started_at));
     return `<div class=bar><b>Usuarios</b><button class=pri data-act=nu>+ Nuevo usuario</button></div><div class=scroll><table class=rt><tr class=hd><th>Usuario</th><th>Nivel</th><th>Estado</th><th>Último ingreso</th><th>Tiempo conectado</th><th></th></tr>${S.users.map(u=>{const l=S.logs.find(x=>x.user_id===u.id),st=u.blocked?['Bloqueado','blocked']:on(l)?['En línea','online']:['Desconectado','offline'];
     return `<tr><td class=first>${esc(u.username)}<small style="display:block;color:var(--mut);font-weight:400;font-size:.85rem">${esc(S.staff[u.id]?.full_name||'')}</small></td><td data-l="Nivel">${esc(u.role)}</td><td data-l="Estado"><span class="tag ${st[1]}">${st[0]}</span></td><td data-l="Último ingreso">${fmt(l?.started_at)}</td><td data-l="Tiempo conectado">${d(l)}</td><td class="n acts"><button data-act=pf data-uid=${u.id}>Perfil</button> ${u.id===S.u.id?'<small>(tú)</small>':`<button class="${u.blocked?'pri':''}" data-act=ub data-uid=${u.id}>${u.blocked?'Habilitar':'Bloquear'}</button> <button class=x data-act=ud data-uid=${u.id}>Eliminar</button>`}</td></tr>`}).join('')}</table></div>
@@ -432,16 +430,21 @@ async function savePay(){
   const rows=[];for(let k=0;k<p.n;k++){const t=ptot(k);if(t<=0)continue;const r=r2(num(p.rc[k]));
     if(p.mt[k]==='efectivo'&&r<t)return alert(`Persona ${k+1}: el valor recibido es menor al total.`);
     rows.push({order_id:p.oid,person:k+1,method:p.mt[k],amount:t,received:p.mt[k]==='efectivo'?r:null,change_given:p.mt[k]==='efectivo'?r2(r-t):null})}
+  if(!(p.st&&(p.st.ins||p.st.claimed))&&await payStale()){closeM();load();setTimeout(()=>alert('Este pedido ya fue cobrado o modificado desde otro dispositivo. No se guardó este pago para evitar un cobro doble.'),50);return}
   if(p.ask&&!p.ok){if(!confirm(ASKMSG))return closeM();p.ok=true}
   const rec={oid:p.oid,tn:S.orders.find(o=>o.id===p.oid)?.table_name||'',rows};
   const tr=rows.filter(r=>r.method==='transferencia').map(r=>({person:r.person,amount:r.amount}));
   // Con transferencia: primero la foto del comprobante; el pago se guarda al guardar la foto (se puede cancelar y cambiar a efectivo)
   if(tr.length){stopCam();S.cam={list:tr,i:0,st:'live',blob:null,url:null,stream:null,err:null,photos:{},paths:{},upl:{},ups:{},rows,rec,ins:null,s2:false};return camM()}
-  const st=(p.st&&p.st.ins)?p.st:(p.st={rows,ins:null,s2:false});rec.rows=st.rows;
+  const st=(p.st&&(p.st.ins||p.st.claimed))?p.st:(p.st={rows,ins:null,s2:false});rec.rows=st.rows;
   if(!await commitPay(st))return;
   S.p=null;S.sel=null;S.d=null;showReceipt(rec);load();
 }
-// Guarda el pago en la base de datos (se puede reintentar sin duplicar pagos)
+// Consulta al servidor si los productos de esta ventana siguen sin cobrar (otro dispositivo pudo cobrarlos antes)
+async function payStale(){const p=S.p;const r=await sb.from('order_items').select('id').in('id',p.ids).eq('paid',false);
+  if(r.error)return false;return (r.data||[]).length!==p.ids.length}
+// Guarda el pago en la base de datos (se puede reintentar sin duplicar pagos).
+// Primero "reserva" los productos como cobrados en una sola operación atómica: si otro dispositivo ya los cobró, no se guarda nada.
 async function commitPay(st){const p=S.p;
   if(!st.claimed&&!st.ins){
     const c=await sb.from('order_items').update({paid:true}).in('id',p.ids).eq('paid',false).select('id');
@@ -463,8 +466,6 @@ async function commitPay(st){const p=S.p;
     if(fail(await sb.from('orders').update({paid:rem.count===0,paid_at:new Date().toISOString()}).eq('id',p.oid)))return false;
     st.s2=true}
   return true}
-  
-  
 // Guarda el pago y sube las fotos de los comprobantes
 async function finishCam(){const c=S.cam;
   if(!await commitPay(c))return;
@@ -677,7 +678,7 @@ addEventListener('beforeprint',()=>{if(shield())attempt()});
 // Actualización automática: al volver a la pestaña, recuperar internet o reabrir la página
 document.addEventListener('visibilitychange',resync);addEventListener('focus',resync);addEventListener('online',resync);addEventListener('pageshow',resync);
 // Actualización automática de la app: detecta una versión nueva publicada en GitHub y recarga sola
-const BUILD='2026-10-12-02';
+const BUILD='2026-10-12-04';
 let _vh=null;
 const hashS=s=>{let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return h+':'+s.length};
 async function doReload(){
