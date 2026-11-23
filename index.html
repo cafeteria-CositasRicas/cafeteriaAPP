@@ -507,9 +507,9 @@ function stopCam(){const c=S.cam;if(!c)return;if(c.stream){c.stream.getTracks().
 function camM(){const c=S.cam,it=c.list[c.i],multi=c.list.length>1;
   const cancel=c.ins?'':`<button class=x style="margin-right:auto" data-act=ccam>Cambiar forma de pago</button>`;
   let h=`<h2>Comprobante de transferencia</h2><p style="margin:0;color:var(--mut)">${esc(c.rec.tn)} · ${multi?'Persona '+it.person+' · ':''}${money(it.amount)}${multi?` (${c.i+1} de ${c.list.length})`:''}</p>${c.ins?'<p style="margin:0;color:var(--ok)">El pago ya quedó registrado; solo falta guardar el comprobante.</p>':''}`;
-  if(c.st==='live')h+=`<div class=cam><video id=cv autoplay playsinline muted></video></div><p style="margin:0;color:var(--mut)">Encuadra el comprobante completo, con buena luz y sin reflejos.</p><div class=bar style="justify-content:flex-end">${cancel}<button class=pri data-act=snap>Tomar foto</button></div>`;
+  if(c.st==='live')h+=`<div class=cam><video id=cv autoplay playsinline muted></video></div><p style="margin:0;color:var(--mut)">Encuadra el comprobante completo, con buena luz y sin reflejos.</p><input type=file id=cfile accept="image/*" hidden><div class=bar style="justify-content:flex-end">${cancel}<button data-act=pick>Subir archivo</button><button class=pri data-act=snap>Tomar foto</button></div>`;
   else if(c.st==='review')h+=`<div class=cam><img src="${c.url}" alt="Foto del comprobante"></div><p style="margin:0;color:var(--mut)">¿Se lee bien el comprobante?</p><div class=bar style="justify-content:flex-end">${cancel}${c.ins?'<button data-act=skip>Continuar sin comprobante</button>':''}<button data-act=retake>Descartar y tomar otra</button><button class=pri data-act=svp>Guardar foto</button></div>`;
-  else h+=`<p class=err style="min-height:0">${esc(c.err)}</p><div class=bar style="justify-content:flex-end">${cancel}<button data-act=skip>Continuar sin comprobante</button><button class=pri data-act=retake>Reintentar</button></div>`;
+  else h+=`<p class=err style="min-height:0">${esc(c.err)}</p><div class=bar style="justify-content:flex-end">${cancel}<input type=file id=cfile accept="image/*" hidden><button data-act=pick>Subir archivo</button><button data-act=skip>Continuar sin comprobante</button><button class=pri data-act=retake>Reintentar</button></div>`;
   setM(h);const sh=document.querySelector('#modal .sheet');if(sh)sh.scrollTop=0;
   if(c.st==='live')startCam();
 }
@@ -526,6 +526,24 @@ async function startCam(){const c=S.cam;
     camM();
   }
 }
+
+// Subir archivo (galería/archivos) como alternativa a la cámara: se reduce y convierte a JPEG igual que la foto
+document.addEventListener('change',async e=>{
+  if(!e.target||e.target.id!=='cfile')return;
+  const c=S.cam,f=e.target.files&&e.target.files[0];if(!c||!f)return;
+  if(!/^image\//.test(f.type))return alert('Selecciona una imagen (JPG, PNG, etc.).');
+  if(f.size>25*1024*1024)return alert('El archivo es demasiado grande (máximo 25 MB).');
+  try{
+    let src,w,h,rel=()=>{};
+    if(window.createImageBitmap){src=await createImageBitmap(f,{imageOrientation:'from-image'});w=src.width;h=src.height;rel=()=>src.close&&src.close()}
+    else{const u=URL.createObjectURL(f);src=await new Promise((ok,ko)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>ko(new Error('imagen no válida'));i.src=u});w=src.naturalWidth;h=src.naturalHeight;rel=()=>URL.revokeObjectURL(u)}
+    const k=Math.min(1,1600/Math.max(w,h)),cv=document.createElement('canvas');cv.width=Math.round(w*k);cv.height=Math.round(h*k);
+    cv.getContext('2d').drawImage(src,0,0,cv.width,cv.height);rel();
+    const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',.78));if(!blob)throw new Error('no se pudo convertir');
+    if(S.cam!==c)return;
+    stopCam();c.blob=blob;c.url=URL.createObjectURL(blob);c.st='review';camM();
+  }catch(err){alert('No se pudo leer el archivo: '+((err&&err.message)||'error desconocido'))}
+});
 
 // ---------- Eventos ----------
 function assign(i,k){S.p.a[i]=k;S.sel=null;pm()}
@@ -602,6 +620,7 @@ async function onClick(e){
     cv.getContext('2d').drawImage(v,0,0,cv.width,cv.height);
     const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',.78));if(!blob)return alert('No se pudo capturar la foto. Inténtalo de nuevo.');
     stopCam();c.blob=blob;c.url=URL.createObjectURL(blob);c.st='review';return camM()}
+  if(a==='pick'){const f=$('#cfile');if(f){f.value='';f.click()}return}
   if(a==='retake'){const c=S.cam;if(!c)return;stopCam();c.blob=null;c.err=null;c.st='live';return camM()}
   if(a==='ccam'){const c=S.cam;if(!c||c.ins)return;stopCam();S.cam=null;return pm()}
   if(a==='svp'){const c=S.cam;if(!c||!c.blob)return;
