@@ -2,9 +2,12 @@
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Cafetería · Pedidos</title>
+<meta name="description" content="Sistema de gestión de pedidos, encargos y caja para Cafetería.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50' font-size='50'%3E%E2%98%95%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <style>
 :root{--bg:#efe5d8;--ink:#2b1b12;--mut:#7a6556;--card:#fffaf3;--line:#dccdbb;--acc:#6b3f23;--pen:#d08a22;--ok:#4f7d3a;--bad:#b3402f;--foam:#f7efe4}
 *{box-sizing:border-box}html,body{margin:0;max-width:100%;overflow-x:hidden}
@@ -254,7 +257,7 @@ const DOM='@cafeteria.app'; // los usuarios se crean como usuario@cafeteria.app
 const PERMS={superusuario:['dashboard','pedidos','encargos','resumen','pagados','caja','historial','productos','usuarios'],admin:['pedidos','encargos','resumen','pagados','caja','historial','productos','usuarios'],mesero:['pedidos','encargos','resumen','pagados','caja']};
 const PROTEGIDOS=['mesero']; // niveles con protección anti-captura
 const TABS={dashboard:'Dashboard',pedidos:'En cola',encargos:'Encargados',resumen:'Por servir',pagados:'Pagados',caja:'Caja',productos:'Productos',usuarios:'Usuarios',historial:'Historial',perfil:'Mi perfil'};
-const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+let sb;
 let _sb2;const getSb2=()=>_sb2||(_sb2=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:'tmp-admin'}}));
 const FINE=matchMedia('(pointer:fine)').matches;
 const VV=window.visualViewport;
@@ -337,6 +340,7 @@ const later=p=>{
   if(p&&(p.table==='sessions_log'||p.table==='audit_log')){if(S.tab==='usuarios'){clearTimeout(tu);tu=setTimeout(loadUsers,300)}return}
   clearTimeout(tm);tm=setTimeout(()=>load(true),250)};
 async function start(){
+  sb=sb||supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
   if(!S.u&&!$('.login'))$('#app').innerHTML='<div class=splash><span class="sp big"></span>Cargando…</div>';
   const {data:{session}}=await sb.auth.getSession();
   if(!session)return login();
@@ -848,7 +852,7 @@ document.addEventListener('contextmenu',e=>{if(shield()&&!e.target.closest('inpu
 addEventListener('beforeprint',()=>{if(shield())attempt()});
 document.addEventListener('visibilitychange',resync);addEventListener('focus',resync);addEventListener('online',resync);addEventListener('pageshow',resync);
 // Actualización automática de la app: detecta una versión nueva publicada en GitHub y recarga sola
-const BUILD='2026-11-23-02';
+const BUILD='2026-11-23-03';
 let _vh=null;
 const hashS=s=>{let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return h+':'+s.length};
 async function doReload(){
@@ -868,5 +872,5 @@ setTimeout(checkVersion,4000);setInterval(checkVersion,60000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkVersion()});
 addEventListener('online',checkVersion);addEventListener('pageshow',checkVersion);
 setInterval(()=>{if(S.u&&schedKey()!==_sch)render()},10000);
-start();
+addEventListener('DOMContentLoaded',start);
 </script></body></html>
