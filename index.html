@@ -4,6 +4,7 @@
 <title>Cafetería · Pedidos</title>
 <meta name="description" content="Sistema de gestión de pedidos, encargos y caja para Cafetería.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50' font-size='50'%3E%E2%98%95%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://egkspfelnrsumpzfdlbs.supabase.co" crossorigin>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
@@ -868,9 +869,9 @@ async function checkVersion(){
     if(changed){S.newVer=true;tryReload();setInterval(tryReload,1000)}
   }catch(e){}
 }
-setTimeout(checkVersion,4000);setInterval(checkVersion,60000);
+setTimeout(checkVersion,15000);setInterval(checkVersion,60000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkVersion()});
-addEventListener('online',checkVersion);addEventListener('pageshow',checkVersion);
+addEventListener('online',checkVersion);addEventListener('pageshow',e=>{if(e.persisted)checkVersion()});
 setInterval(()=>{if(S.u&&schedKey()!==_sch)render()},10000);
 addEventListener('DOMContentLoaded',start);
 </script></body></html>
